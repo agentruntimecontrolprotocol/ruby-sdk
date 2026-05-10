@@ -102,7 +102,8 @@ RSpec.describe Arcp::Json do
     expect(decoded.session_id).to eq(envelope.session_id)
     expect(decoded.job_id).to eq(envelope.job_id)
     expect(decoded.timestamp.utc).to eq(envelope.timestamp.utc)
-    expect(decoded.payload).to eq(percent: 11, message: 'hello')
+    expect(decoded.payload.percent).to eq(11)
+    expect(decoded.payload.message).to eq('hello')
   end
 
   it 'round-trips trace context, idempotency, and priority' do
