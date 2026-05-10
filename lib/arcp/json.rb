@@ -21,10 +21,21 @@ module Arcp
     # @return [Envelope]
     # @raise [Arcp::Error::ParseError]
     def self.decode_envelope(string)
-      raw = JSON.parse(string, symbolize_names: true)
+      raw = JSON.parse(string)
       decode_envelope_hash(raw)
     rescue JSON::ParserError => e
       raise Arcp::Error::ParseError, "invalid JSON: #{e.message}"
+    end
+
+    # Convert top-level envelope keys to symbols so the call sites in
+    # `decode_envelope_hash` can index them. Deep-nested user data
+    # under `payload` is preserved as-is (string keys for JSON wire
+    # data, mixed for in-process objects).
+    def self.symbolize_top_level(hash)
+      return hash unless hash.is_a?(Hash)
+      return hash if hash.empty? || hash.keys.first.is_a?(Symbol)
+
+      hash.transform_keys(&:to_sym)
     end
 
     # @param hash [Hash]
@@ -32,6 +43,7 @@ module Arcp
     def self.decode_envelope_hash(hash)
       raise Arcp::Error::ParseError, 'envelope must be a Hash' unless hash.is_a?(Hash)
 
+      hash = symbolize_top_level(hash)
       type = require_field(hash, :type)
       raw_payload = hash[:payload] || {}
       payload_class = MessageTypeRegistry.class_for(type)

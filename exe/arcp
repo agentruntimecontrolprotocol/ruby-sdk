@@ -1,9 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require 'arcp'
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
 
-# CLI dispatch is wired up in Phase 7. For now this shim exists so the
-# gem manifest (`bindir`/`executables`) has a real file to package.
-warn 'arcp CLI is not yet implemented — see PLAN.md and CONFORMANCE.md.'
-exit 1
+require 'arcp/cli'
+
+Dry::CLI.new(Arcp::CLI).call

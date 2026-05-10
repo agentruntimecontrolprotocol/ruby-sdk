@@ -21,9 +21,9 @@ RSpec.describe Arcp::Transport::Stdio, :integration do
 
       client = Arcp::Client::Client.new(transport: client_transport)
       client.open(auth: { scheme: 'bearer', token: 'tok-alice' }, client: client_identity)
-      result = client.invoke(tool: 'echo', arguments: { hello: 'stdio' })
+      result = client.invoke(tool: 'echo', arguments: { 'hello' => 'stdio' })
       expect(result).to be_successful
-      expect(result.value).to eq(hello: 'stdio')
+      expect(result.value).to eq('hello' => 'stdio')
       client.close
     end
   end

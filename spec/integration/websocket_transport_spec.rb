@@ -45,9 +45,9 @@ RSpec.describe Arcp::Transport::Websocket, :integration do
       client = Arcp::Client::Client.new(transport: transport)
       begin
         client.open(auth: { scheme: 'bearer', token: 'tok-alice' }, client: client_identity)
-        result = client.invoke(tool: 'echo', arguments: { hello: 'ws' })
+        result = client.invoke(tool: 'echo', arguments: { 'hello' => 'ws' })
         expect(result).to be_successful
-        expect(result.value).to eq(hello: 'ws')
+        expect(result.value).to eq('hello' => 'ws')
       ensure
         client.close
         server_task.stop

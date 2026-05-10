@@ -6,14 +6,14 @@ RSpec.describe Arcp::MessageTypeRegistry do
   let(:samples) do
     {
       'session.open' => Arcp::Messages::Session::Open.new(
-        auth: { scheme: 'bearer', token: 'tok' },
-        client: { kind: 'cli', version: '1.0', fingerprint: 'sha256:x' },
-        capabilities: { streaming: true }
+        auth: { 'scheme' => 'bearer', 'token' => 'tok' },
+        client: { 'kind' => 'cli', 'version' => '1.0', 'fingerprint' => 'sha256:x' },
+        capabilities: { 'streaming' => true }
       ),
       'session.accepted' => Arcp::Messages::Session::Accepted.new(
         session_id: 'sess_1',
-        runtime: { kind: 'arcp-ruby', version: '0.1.0' },
-        capabilities: { streaming: true },
+        runtime: { 'kind' => 'arcp-ruby', 'version' => '0.1.0' },
+        capabilities: { 'streaming' => true },
         lease: nil
       ),
       'session.rejected' => Arcp::Messages::Session::Rejected.new(
@@ -25,8 +25,8 @@ RSpec.describe Arcp::MessageTypeRegistry do
       'ack' => Arcp::Messages::Control::Ack.new(detail: 'ok'),
       'nack' => Arcp::Messages::Control::Nack.new(code: 'INVALID_ARGUMENT', message: 'bad', details: nil, retryable: false),
       'cancel' => Arcp::Messages::Control::Cancel.new(target: 'job', target_id: 'job_x', reason: 'user', deadline_ms: 5_000),
-      'tool.invoke' => Arcp::Messages::Execution::ToolInvoke.new(tool: 'fs.search', arguments: { glob: '*.rb' }),
-      'tool.result' => Arcp::Messages::Execution::ToolResult.new(value: { ok: 1 }, result_ref: nil),
+      'tool.invoke' => Arcp::Messages::Execution::ToolInvoke.new(tool: 'fs.search', arguments: { 'glob' => '*.rb' }),
+      'tool.result' => Arcp::Messages::Execution::ToolResult.new(value: { 'ok' => 1 }, result_ref: nil),
       'tool.error' => Arcp::Messages::Execution::ToolError.new(
         code: 'INTERNAL', message: 'boom', retryable: false, details: nil, cause: nil, trace_id: nil
       ),
@@ -40,13 +40,13 @@ RSpec.describe Arcp::MessageTypeRegistry do
       ),
       'human.input.request' => Arcp::Messages::Human::InputRequest.new(
         prompt: 'pick a branch',
-        response_schema: { type: 'object' },
-        default: { branch: 'main' },
+        response_schema: { 'type' => 'object' },
+        default: { 'branch' => 'main' },
         expires_at: '2026-05-09T14:00:00Z',
         destinations: nil
       ),
       'human.input.response' => Arcp::Messages::Human::InputResponse.new(
-        value: { branch: 'feat' }, responded_by: 'me', responded_at: '2026-05-09T13:30:00Z'
+        value: { 'branch' => 'feat' }, responded_by: 'me', responded_at: '2026-05-09T13:30:00Z'
       ),
       'permission.request' => Arcp::Messages::Permissions::PermissionRequest.new(
         permission: 'fs.write', resource: 'tmp', operation: 'write',
@@ -57,10 +57,10 @@ RSpec.describe Arcp::MessageTypeRegistry do
         operation: 'write', expires_at: '2026-05-09T14:00:00Z'
       ),
       'subscribe' => Arcp::Messages::Subscriptions::Subscribe.new(
-        filter: { session_id: ['sess_x'] }, since: nil
+        filter: { 'session_id' => ['sess_x'] }, since: nil
       ),
       'subscribe.event' => Arcp::Messages::Subscriptions::SubscribeEvent.new(
-        event: { type: 'log', payload: { message: 'hi' } }, sequence: 7
+        event: { 'type' => 'log', 'payload' => { 'message' => 'hi' } }, sequence: 7
       ),
       'artifact.put' => Arcp::Messages::Artifacts::ArtifactPut.new(
         artifact_id: 'art_x', media_type: 'application/json', size: 4,
@@ -70,9 +70,9 @@ RSpec.describe Arcp::MessageTypeRegistry do
         artifact_id: 'art_x', media_type: 'application/json', size: 4,
         uri: 'arcp://session/sess_x/artifact/art_x', sha256: nil, expires_at: nil, data: nil
       ),
-      'log' => Arcp::Messages::Telemetry::Log.new(level: 'info', message: 'hi', attributes: { a: 1 }),
+      'log' => Arcp::Messages::Telemetry::Log.new(level: 'info', message: 'hi', attributes: { 'a' => 1 }),
       'metric' => Arcp::Messages::Telemetry::Metric.new(
-        name: 'tokens.used', value: 1432, unit: 'tokens', dims: { kind: 'input' }
+        name: 'tokens.used', value: 1432, unit: 'tokens', dims: { 'kind' => 'input' }
       ),
       'trace.span' => Arcp::Messages::Telemetry::TraceSpan.new(
         trace_id: 't', span_id: 's', name: 'op', parent_span_id: nil,
