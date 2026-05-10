@@ -6,7 +6,7 @@ RSpec.describe Arcp::Runtime::JobManager do
   let(:emitted) { [] }
   let(:emit) { ->(record, payload) { emitted << [record.job_id.value, payload] } }
   let(:fake_clock) do
-    Class.new do
+    clock = Class.new do
       class << self
         attr_accessor :now_value
       end
@@ -14,7 +14,9 @@ RSpec.describe Arcp::Runtime::JobManager do
       def self.now
         now_value
       end
-    end.tap { |c| c.now_value = Time.utc(2026, 5, 9, 12, 0, 0) }
+    end
+    clock.now_value = Time.utc(2026, 5, 9, 12, 0, 0)
+    clock
   end
 
   it 'transitions accepted -> running on start, then completed' do

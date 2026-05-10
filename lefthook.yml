@@ -1,0 +1,11 @@
+pre-commit:
+  parallel: true
+  commands:
+    rubocop:
+      glob: "*.{rb,rake,gemspec}"
+      run: bundle exec rubocop --force-exclusion {staged_files}
+
+pre-push:
+  commands:
+    checks:
+      run: bundle exec rake

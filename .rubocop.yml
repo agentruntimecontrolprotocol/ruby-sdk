@@ -1,6 +1,7 @@
 plugins:
   - rubocop-rspec
   - rubocop-performance
+  - rubocop-rake
 
 AllCops:
   TargetRubyVersion: 3.4
@@ -20,6 +21,8 @@ Style/StringLiterals:
 Style/StringLiteralsInInterpolation:
   EnforcedStyle: single_quotes
 
+# YARD docstrings exist where they add protocol value; blanket top-level
+# class/module comments are not required for this gem.
 Style/Documentation:
   Enabled: false
 
@@ -27,9 +30,8 @@ Style/FrozenStringLiteralComment:
   Enabled: true
   EnforcedStyle: always
 
-Naming/AccessorMethodName:
-  Enabled: false
-
+# Protocol/runtime objects are intentionally larger than Sandi Metz-style
+# service classes; these limits flag outliers without forcing extra indirection.
 Metrics/MethodLength:
   Max: 40
 
@@ -58,6 +60,7 @@ Metrics/ParameterLists:
   Max: 8
   CountKeywordArgs: false
 
+# Short names are allowed for narrow protocol ids and tiny block locals.
 Naming/MethodParameterName:
   AllowedNames:
     - a
@@ -65,9 +68,12 @@ Naming/MethodParameterName:
     - id
     - kw
 
+# Integration specs are organized by protocol scenario first, not by a single
+# nested umbrella describe.
 RSpec/MultipleDescribes:
   Enabled: false
 
+# Keep implementation files readable without forcing awkward envelope wrapping.
 Layout/LineLength:
   Max: 110
   Exclude:
@@ -76,13 +82,9 @@ Layout/LineLength:
 RSpec/ExampleLength:
   Max: 60
 
+# Some manager command methods return booleans to signal whether a state change
+# happened; forcing `?` names there would misrepresent them as pure predicates.
 Naming/PredicateMethod:
-  Enabled: false
-
-Lint/DuplicateBranch:
-  Enabled: false
-
-Style/MultilineBlockChain:
   Enabled: false
 
 RSpec/MultipleExpectations:
@@ -99,6 +101,8 @@ RSpec/DescribeClass:
     - 'spec/integration/**/*'
     - 'spec/e2e/**/*'
 
+# Specs are grouped by test layer (`unit`, `integration`, `e2e`) instead of
+# mirroring the source tree exactly.
 RSpec/SpecFilePathFormat:
   Enabled: false
 

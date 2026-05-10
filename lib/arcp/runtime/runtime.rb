@@ -197,12 +197,8 @@ module Arcp
           handle_interrupt(envelope, interrupt, ctx)
         in Messages::Control::Resume => resume
           handle_resume(envelope, resume, ctx)
-        in Messages::Human::InputResponse => response
-          ctx.pending.resolve(envelope.correlation_id&.value, response)
-          ctx.job_manager.unblock(envelope.job_id) if envelope.job_id
-        in Messages::Human::ChoiceResponse => response
-          ctx.pending.resolve(envelope.correlation_id&.value, response)
-          ctx.job_manager.unblock(envelope.job_id) if envelope.job_id
+        in Messages::Human::InputResponse | Messages::Human::ChoiceResponse => response
+          handle_human_response(envelope, response, ctx)
         in Messages::Permissions::PermissionGrant | Messages::Permissions::PermissionDeny
           ctx.pending.resolve(envelope.correlation_id&.value, envelope.payload)
         in Messages::Subscriptions::Subscribe => sub
@@ -218,6 +214,11 @@ module Arcp
         else
           send_unimplemented(envelope, ctx)
         end
+      end
+
+      def handle_human_response(envelope, response, ctx)
+        ctx.pending.resolve(envelope.correlation_id&.value, response)
+        ctx.job_manager.unblock(envelope.job_id) if envelope.job_id
       end
 
       def handle_subscribe(envelope, sub, ctx)
