@@ -95,18 +95,18 @@ RSpec.describe Arcp::Store::EventLog do
   describe 'idempotent outcome storage' do
     it 'records and looks up outcomes by (principal, key)' do
       newly = log.record_idempotent_outcome(
-        session_principal: 'nick@example.com',
+        session_principal: 'alice@example.com',
         idempotency_key: 'refund-1',
         outcome: { status: 'ok', amount: 100 }
       )
       expect(newly).to be(true)
       again = log.record_idempotent_outcome(
-        session_principal: 'nick@example.com',
+        session_principal: 'alice@example.com',
         idempotency_key: 'refund-1',
         outcome: { status: 'changed' }
       )
       expect(again).to be(false)
-      stored = log.lookup_idempotent_outcome(session_principal: 'nick@example.com', idempotency_key: 'refund-1')
+      stored = log.lookup_idempotent_outcome(session_principal: 'alice@example.com', idempotency_key: 'refund-1')
       expect(stored).to eq(status: 'ok', amount: 100)
     end
   end
