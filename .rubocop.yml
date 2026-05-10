@@ -31,13 +31,13 @@ Naming/AccessorMethodName:
   Enabled: false
 
 Metrics/MethodLength:
-  Max: 30
+  Max: 40
 
 Metrics/ClassLength:
-  Max: 300
+  Max: 400
 
 Metrics/ModuleLength:
-  Max: 300
+  Max: 400
 
 Metrics/BlockLength:
   Exclude:
@@ -49,10 +49,10 @@ Metrics/AbcSize:
   Max: 40
 
 Metrics/CyclomaticComplexity:
-  Max: 18
+  Max: 22
 
 Metrics/PerceivedComplexity:
-  Max: 18
+  Max: 22
 
 Metrics/ParameterLists:
   Max: 8

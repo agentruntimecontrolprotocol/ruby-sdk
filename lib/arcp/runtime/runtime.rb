@@ -9,12 +9,14 @@ require 'arcp/envelope'
 require 'arcp/error'
 require 'arcp/error_code'
 require 'arcp/ids'
+require 'arcp/runtime/artifact_store'
 require 'arcp/runtime/job_manager'
 require 'arcp/runtime/lease_manager'
 require 'arcp/runtime/pending_registry'
 require 'arcp/runtime/session'
 require 'arcp/runtime/session_helper'
 require 'arcp/runtime/stream_manager'
+require 'arcp/runtime/subscription_manager'
 require 'arcp/store/event_log'
 require 'arcp/version'
 
@@ -23,16 +25,19 @@ module Arcp
     # Per-session runtime state. Created on a successful handshake.
     class SessionContext
       attr_accessor :helper, :parent_task
-      attr_reader :record, :transport, :job_manager, :stream_manager, :pending, :lease_manager
+      attr_reader :record, :transport, :job_manager, :stream_manager, :pending,
+                  :lease_manager, :subscription_manager, :artifact_store
 
       def initialize(record:, transport:, job_manager:, stream_manager:, pending:,
-                     lease_manager:, helper: nil)
+                     lease_manager:, subscription_manager:, artifact_store:, helper: nil)
         @record = record
         @transport = transport
         @job_manager = job_manager
         @stream_manager = stream_manager
         @pending = pending
         @lease_manager = lease_manager
+        @subscription_manager = subscription_manager
+        @artifact_store = artifact_store
         @helper = helper
       end
 
@@ -104,6 +109,7 @@ module Arcp
       def emit_session_envelope(ctx, envelope)
         @event_log.append(envelope)
         ctx.transport.send_envelope(envelope)
+        ctx.subscription_manager&.fan_out(envelope)
       end
 
       def serve(transport)
@@ -158,7 +164,9 @@ module Arcp
           ),
           stream_manager: StreamManager.new(emit: emit),
           pending: PendingRegistry.new,
-          lease_manager: LeaseManager.new(emit: emit, clock: @clock)
+          lease_manager: LeaseManager.new(emit: emit, clock: @clock),
+          subscription_manager: SubscriptionManager.new(emit: emit, event_log: @event_log, clock: @clock),
+          artifact_store: ArtifactStore.new(clock: @clock)
         )
         ctx.parent_task = parent_task
         ctx.helper = SessionHelper.new(runtime: self, ctx: ctx)
@@ -187,6 +195,8 @@ module Arcp
           handle_cancel(envelope, cancel, ctx)
         in Messages::Control::Interrupt => interrupt
           handle_interrupt(envelope, interrupt, ctx)
+        in Messages::Control::Resume => resume
+          handle_resume(envelope, resume, ctx)
         in Messages::Human::InputResponse => response
           ctx.pending.resolve(envelope.correlation_id&.value, response)
           ctx.job_manager.unblock(envelope.job_id) if envelope.job_id
@@ -195,9 +205,105 @@ module Arcp
           ctx.job_manager.unblock(envelope.job_id) if envelope.job_id
         in Messages::Permissions::PermissionGrant | Messages::Permissions::PermissionDeny
           ctx.pending.resolve(envelope.correlation_id&.value, envelope.payload)
+        in Messages::Subscriptions::Subscribe => sub
+          handle_subscribe(envelope, sub, ctx)
+        in Messages::Subscriptions::Unsubscribe => unsub
+          handle_unsubscribe(envelope, unsub, ctx)
+        in Messages::Artifacts::ArtifactPut => put
+          handle_artifact_put(envelope, put, ctx)
+        in Messages::Artifacts::ArtifactFetch => fetch
+          handle_artifact_fetch(envelope, fetch, ctx)
+        in Messages::Artifacts::ArtifactRelease => release
+          handle_artifact_release(envelope, release, ctx)
         else
           send_unimplemented(envelope, ctx)
         end
+      end
+
+      def handle_subscribe(envelope, sub, ctx)
+        record = ctx.subscription_manager.subscribe(
+          session_id: ctx.session_id,
+          filter: sub.filter,
+          since: sub.since
+        )
+        accepted = Messages::Subscriptions::SubscribeAccepted.new(
+          subscription_id: record.subscription_id.value, detail: nil
+        )
+        send_outbound(ctx.transport, envelope, accepted, ctx.session_id, correlation_id: envelope.id)
+        Async { ctx.subscription_manager.deliver_backfill(record) }
+      rescue Arcp::Error::PermissionDenied => e
+        nack = Messages::Control::Nack.new(
+          code: e.code, message: e.message, details: e.details, retryable: false
+        )
+        send_outbound(ctx.transport, envelope, nack, ctx.session_id, correlation_id: envelope.id)
+      end
+
+      def handle_unsubscribe(envelope, _unsub, ctx)
+        sub_id = envelope.subscription_id
+        return send_unimplemented(envelope, ctx) if sub_id.nil?
+
+        ctx.subscription_manager.unsubscribe(sub_id, reason: 'client requested')
+      end
+
+      def handle_artifact_put(envelope, put, ctx)
+        ref = ctx.artifact_store.put(
+          session_id: ctx.session_id,
+          artifact_id: ArtifactId.new(value: put.artifact_id),
+          media_type: put.media_type, data: put.data, sha256: put.sha256
+        )
+        send_outbound(ctx.transport, envelope, ref, ctx.session_id, correlation_id: envelope.id)
+      rescue Arcp::Error => e
+        send_error_nack(envelope, ctx, e)
+      end
+
+      def handle_artifact_fetch(envelope, fetch, ctx)
+        ref = ctx.artifact_store.fetch(
+          artifact_id: ArtifactId.new(value: fetch.artifact_id),
+          session_id: ctx.session_id, include_data: true
+        )
+        send_outbound(ctx.transport, envelope, ref, ctx.session_id, correlation_id: envelope.id)
+      rescue Arcp::Error => e
+        send_error_nack(envelope, ctx, e)
+      end
+
+      def handle_artifact_release(envelope, release, ctx)
+        ctx.artifact_store.release(
+          artifact_id: ArtifactId.new(value: release.artifact_id),
+          session_id: ctx.session_id
+        )
+        ack = Messages::Control::Ack.new(detail: 'released')
+        send_outbound(ctx.transport, envelope, ack, ctx.session_id, correlation_id: envelope.id)
+      rescue Arcp::Error => e
+        send_error_nack(envelope, ctx, e)
+      end
+
+      def handle_resume(envelope, resume, ctx)
+        if resume.checkpoint_id
+          send_error_nack(envelope, ctx,
+                          Arcp::Error::Unimplemented.new(section: '§19', detail: 'checkpoint resume'))
+          return
+        end
+
+        replay_envelopes = @event_log.replay(
+          after_seq: extract_after_seq(resume.after_message_id),
+          session_id: ctx.session_id.value
+        )
+        replay_envelopes.each { |env| ctx.transport.send_envelope(env) }
+        ack = Messages::Control::Ack.new(detail: "resumed: replayed #{replay_envelopes.size} events")
+        send_outbound(ctx.transport, envelope, ack, ctx.session_id, correlation_id: envelope.id)
+      end
+
+      def extract_after_seq(message_id)
+        return nil if message_id.nil? || message_id.empty?
+
+        @event_log.seq_for(message_id)
+      end
+
+      def send_error_nack(envelope, ctx, error)
+        nack = Messages::Control::Nack.new(
+          code: error.code, message: error.message, details: error.details, retryable: error.retryable?
+        )
+        send_outbound(ctx.transport, envelope, nack, ctx.session_id, correlation_id: envelope.id)
       end
 
       def handle_session_close(ctx)
@@ -300,6 +406,7 @@ module Arcp
         )
         @event_log.append(envelope)
         transport.send_envelope(envelope)
+        lookup_session_ctx(session_id)&.subscription_manager&.fan_out(envelope)
       end
 
       def emit_session_message(transport, session_record, source_record, payload)
@@ -321,6 +428,12 @@ module Arcp
         )
         @event_log.append(envelope)
         transport.send_envelope(envelope)
+        lookup_session_ctx(session_record.session_id)&.subscription_manager&.fan_out(envelope)
+      end
+
+      def lookup_session_ctx(session_id)
+        key = session_id.respond_to?(:value) ? session_id.value : session_id
+        @sessions_mutex.synchronize { @sessions[key] }
       end
     end
   end

@@ -36,6 +36,8 @@ require 'arcp/runtime/stream_manager'
 require 'arcp/runtime/pending_registry'
 require 'arcp/runtime/lease_manager'
 require 'arcp/runtime/session_helper'
+require 'arcp/runtime/subscription_manager'
+require 'arcp/runtime/artifact_store'
 require 'arcp/runtime/runtime'
 require 'arcp/client/client'
 
