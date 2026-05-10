@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'arcp'
+
+# CLI dispatch is wired up in Phase 7. For now this shim exists so the
+# gem manifest (`bindir`/`executables`) has a real file to package.
+warn 'arcp CLI is not yet implemented — see PLAN.md and CONFORMANCE.md.'
+exit 1

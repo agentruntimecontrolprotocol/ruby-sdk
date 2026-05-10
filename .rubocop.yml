@@ -1,0 +1,84 @@
+plugins:
+  - rubocop-rspec
+  - rubocop-performance
+
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - 'samples/**/*'
+    - 'tmp/**/*'
+    - 'pkg/**/*'
+    - 'vendor/**/*'
+    - 'sig/**/*'
+    - 'Gemfile.lock'
+
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: single_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/ClassLength:
+  Max: 300
+
+Metrics/ModuleLength:
+  Max: 300
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - 'arcp.gemspec'
+    - 'Rakefile'
+
+Metrics/AbcSize:
+  Max: 30
+
+Metrics/CyclomaticComplexity:
+  Max: 12
+
+Metrics/PerceivedComplexity:
+  Max: 12
+
+Layout/LineLength:
+  Max: 110
+  Exclude:
+    - 'spec/**/*'
+
+RSpec/ExampleLength:
+  Max: 25
+
+RSpec/MultipleExpectations:
+  Max: 8
+
+RSpec/NestedGroups:
+  Max: 5
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+RSpec/DescribeClass:
+  Exclude:
+    - 'spec/integration/**/*'
+    - 'spec/e2e/**/*'
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+# Allow modules to be split across files
+Style/ClassAndModuleChildren:
+  EnforcedStyle: nested
