@@ -1,0 +1,68 @@
+# Action pinning policy:
+#   - First-party actions/* pinned to major version tag (GitHub-maintained).
+#   - Third-party actions pinned to a full commit SHA with a version comment.
+name: test
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.editorconfig'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.editorconfig'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Ruby ${{ matrix.ruby }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor from arcp.gemspec required_ruby_version (>= 3.4.0) and latest stable.
+        ruby: ['3.4', '3.5']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Ruby ${{ matrix.ruby }}
+        uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1.306.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: RuboCop
+        run: bundle exec rubocop --parallel
+
+      - name: RSpec
+        run: bundle exec rake spec
+
+      - name: Upload test artifacts
+        if: failure()
+        # actions/upload-artifact v4.4.3
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: rspec-results-ruby-${{ matrix.ruby }}
+          path: |
+            coverage/
+          if-no-files-found: ignore
+          retention-days: 7
