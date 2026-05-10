@@ -280,6 +280,21 @@ module Arcp
 
       # @return [Arcp::Runtime::PendingRegistry, nil]
       def pending = @extras[:pending]
+
+      # @return [Arcp::Runtime::SessionHelper, nil]
+      def helper = @extras[:helper]
+
+      # @return [Arcp::Runtime::LeaseManager, nil]
+      def leases = @extras[:leases]
+
+      # Convenience: ask the human via the session helper.
+      def request_human_input(**kw)
+        helper.request_human_input(job_id: job_id, **kw)
+      end
+
+      def request_permission(**kw)
+        helper.request_permission(job_id: job_id, **kw)
+      end
     end
   end
 end

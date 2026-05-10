@@ -10,8 +10,10 @@ require 'arcp/error'
 require 'arcp/error_code'
 require 'arcp/ids'
 require 'arcp/runtime/job_manager'
+require 'arcp/runtime/lease_manager'
 require 'arcp/runtime/pending_registry'
 require 'arcp/runtime/session'
+require 'arcp/runtime/session_helper'
 require 'arcp/runtime/stream_manager'
 require 'arcp/store/event_log'
 require 'arcp/version'
@@ -20,15 +22,18 @@ module Arcp
   module Runtime
     # Per-session runtime state. Created on a successful handshake.
     class SessionContext
-      attr_reader :record, :transport, :job_manager, :stream_manager, :pending
-      attr_accessor :parent_task
+      attr_accessor :helper, :parent_task
+      attr_reader :record, :transport, :job_manager, :stream_manager, :pending, :lease_manager
 
-      def initialize(record:, transport:, job_manager:, stream_manager:, pending:)
+      def initialize(record:, transport:, job_manager:, stream_manager:, pending:,
+                     lease_manager:, helper: nil)
         @record = record
         @transport = transport
         @job_manager = job_manager
         @stream_manager = stream_manager
         @pending = pending
+        @lease_manager = lease_manager
+        @helper = helper
       end
 
       def session_id = record.session_id
@@ -93,6 +98,14 @@ module Arcp
         @tools[name] = block
       end
 
+      # @api private
+      # Emit a fully-formed envelope through the session's transport
+      # and persist it to the event log. Used by SessionHelper.
+      def emit_session_envelope(ctx, envelope)
+        @event_log.append(envelope)
+        ctx.transport.send_envelope(envelope)
+      end
+
       def serve(transport)
         session_id = SessionId.random
         record = handshake(transport, session_id)
@@ -144,9 +157,11 @@ module Arcp
             emit: emit
           ),
           stream_manager: StreamManager.new(emit: emit),
-          pending: PendingRegistry.new
+          pending: PendingRegistry.new,
+          lease_manager: LeaseManager.new(emit: emit, clock: @clock)
         )
         ctx.parent_task = parent_task
+        ctx.helper = SessionHelper.new(runtime: self, ctx: ctx)
         ctx
       end
 
@@ -207,7 +222,12 @@ module Arcp
           correlation_id: envelope.id, trace_id: envelope.trace_id
         )
         parent = ctx.parent_task
-        extras = { streams: ctx.stream_manager, pending: ctx.pending }
+        extras = {
+          streams: ctx.stream_manager,
+          pending: ctx.pending,
+          helper: ctx.helper,
+          leases: ctx.lease_manager
+        }
         ctx.job_manager.start(parent, job_id, extras: extras) do |jctx|
           tool.call(jctx, invoke.arguments)
         end
