@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name        = 'arcp'
   spec.version     = Arcp::IMPL_VERSION
   spec.authors     = ['ARCP Authors']
-  spec.email       = ['arcp@example.invalid']
+  spec.email       = ['arcp-authors@users.noreply.github.com']
 
   spec.summary     = 'Reference Ruby implementation of the Agent Runtime Control Protocol (ARCP).'
   spec.description = <<~DESC
@@ -14,13 +14,13 @@ Gem::Specification.new do |spec|
     message model, a fiber-based runtime, a client, WebSocket and stdio transports,
     a SQLite-backed event log, and a CLI. Built on the async gem.
   DESC
-  spec.homepage    = 'https://github.com/example/arcp'
+  spec.homepage    = 'https://github.com/nficano/arpc'
   spec.license     = 'Apache-2.0'
 
   spec.required_ruby_version = '>= 3.4.0'
 
-  spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/CHANGELOG.md"
-  spec.metadata['source_code_uri']       = "#{spec.homepage}.git"
+  spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/ruby-sdk/CHANGELOG.md"
+  spec.metadata['source_code_uri']       = 'https://github.com/nficano/arpc.git'
   spec.metadata['bug_tracker_uri']       = "#{spec.homepage}/issues"
   spec.metadata['rubygems_mfa_required'] = 'true'
 
@@ -31,7 +31,10 @@ Gem::Specification.new do |spec|
     'exe/*',
     'README.md',
     'CONFORMANCE.md',
-    'RFC-0001-v2.md'
+    'RFC-0001-v2.md',
+    'PLAN.md',
+    'CHANGELOG.md',
+    'LICENSE'
   ]
   spec.require_paths = ['lib']
   spec.bindir        = 'exe'
