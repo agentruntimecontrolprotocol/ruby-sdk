@@ -11,6 +11,11 @@ end
 $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
 require 'arcp'
 
+# Silence Async's structured logger during tests; spec failures still
+# show via RSpec.
+require 'console'
+Console.logger = Console::Logger.new(File.open(File::NULL, 'w'), level: Logger::FATAL)
+
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
     expectations.include_chain_clauses_in_custom_matcher_descriptions = true

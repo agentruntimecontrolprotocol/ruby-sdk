@@ -63,6 +63,7 @@ Naming/MethodParameterName:
     - a
     - b
     - id
+    - kw
 
 RSpec/MultipleDescribes:
   Enabled: false
@@ -73,7 +74,16 @@ Layout/LineLength:
     - 'spec/**/*'
 
 RSpec/ExampleLength:
-  Max: 25
+  Max: 60
+
+Naming/PredicateMethod:
+  Enabled: false
+
+Lint/DuplicateBranch:
+  Enabled: false
+
+Style/MultilineBlockChain:
+  Enabled: false
 
 RSpec/MultipleExpectations:
   Max: 8

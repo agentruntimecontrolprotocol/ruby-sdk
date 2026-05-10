@@ -31,6 +31,9 @@ require 'arcp/transport/transport'
 require 'arcp/transport/memory'
 
 require 'arcp/runtime/session'
+require 'arcp/runtime/job_manager'
+require 'arcp/runtime/stream_manager'
+require 'arcp/runtime/pending_registry'
 require 'arcp/runtime/runtime'
 require 'arcp/client/client'
 

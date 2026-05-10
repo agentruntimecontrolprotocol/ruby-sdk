@@ -41,5 +41,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'dry-cli', '~> 1.0'
   spec.add_dependency 'json_schemer', '~> 2.0'
   spec.add_dependency 'jwt', '~> 2.0'
+  spec.add_dependency 'logger', '~> 1.6'
   spec.add_dependency 'sqlite3', '~> 2.0'
 end
