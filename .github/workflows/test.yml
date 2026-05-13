@@ -38,6 +38,11 @@ jobs:
       matrix:
         # Floor from arcp.gemspec required_ruby_version (>= 3.4.0) and latest stable.
         ruby: ['3.4', '3.5']
+    env:
+      # sqlite3 precompiled gems don't yet ship a 3.5 ABI binary (3.5 is
+      # still preview). Force source compilation against the bundled
+      # amalgamation so the matrix entry resolves.
+      BUNDLE_FORCE_RUBY_PLATFORM: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
