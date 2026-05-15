@@ -27,7 +27,7 @@ module Arcp
 
         bytes = message.respond_to?(:buffer) ? message.buffer : message.to_s
         Arcp::Envelope.from_json(bytes)
-      rescue EOFError, IOError
+      rescue EOFError
         @closed = true
         nil
       end

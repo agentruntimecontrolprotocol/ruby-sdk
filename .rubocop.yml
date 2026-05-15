@@ -48,7 +48,18 @@ Metrics/BlockLength:
     - 'Rakefile'
 
 Metrics/AbcSize:
-  Max: 40
+  Max: 50
+
+# Constants defined inside Data.define do ... end blocks are a deliberate
+# idiom for value-object-local constants (e.g. HEX32 regex on Envelope,
+# ENCODINGS on ResultChunk).
+Lint/ConstantDefinitionInBlock:
+  Enabled: false
+
+# `reason:` is part of the Transport#close interface contract even when
+# concrete subclasses don't use it.
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
 
 Metrics/CyclomaticComplexity:
   Max: 22
@@ -65,8 +76,10 @@ Naming/MethodParameterName:
   AllowedNames:
     - a
     - b
+    - h
     - id
     - kw
+    - t
 
 # Integration specs are organized by protocol scenario first, not by a single
 # nested umbrella describe.

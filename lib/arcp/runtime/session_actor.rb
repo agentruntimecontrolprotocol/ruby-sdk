@@ -167,10 +167,8 @@ module Arcp
           handle_subscribe(env)
         when Arcp::MessageTypes::JOB_UNSUBSCRIBE
           handle_unsubscribe(env)
-        else
-          # forward-compat: ignore unknown wire types
-          nil
         end
+        # forward-compat: unknown wire types fall through silently.
       rescue Arcp::Error => e
         reply_error(env, e)
       end
