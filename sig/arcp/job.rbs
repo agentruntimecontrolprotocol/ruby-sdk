@@ -1,0 +1,71 @@
+module Arcp
+  module Job
+    module EventKind
+      PROGRESS: String
+      RESULT_CHUNK: String
+      LOG: String
+      THOUGHT: String
+      TOOL_CALL: String
+      TOOL_RESULT: String
+      STATUS: String
+      METRIC: String
+      TRACE_SPAN: String
+      DELEGATE: String
+      ALL: Array[String]
+    end
+
+    class AgentRef
+      attr_reader name: String
+      attr_reader version: String?
+      def self.parse: (String?) -> AgentRef?
+      def to_s: () -> String
+    end
+
+    class Event
+      attr_reader kind: String
+      attr_reader body: untyped
+      def self.from_h: (Hash[String | Symbol, untyped]) -> Event
+      def to_h: () -> Hash[String, untyped]
+      def known?: () -> bool
+    end
+
+    class Handle
+      attr_reader job_id: String
+      attr_reader agent: String
+      attr_reader submitted_at: String?
+      attr_reader lease: Arcp::Lease::Lease?
+      def subscribe: (client: Arcp::Client, **untyped) -> Enumerator[Event, void]
+      def cancel: (client: Arcp::Client, ?reason: String?) -> Envelope
+      def get_result: (client: Arcp::Client) -> Result
+    end
+
+    class Summary
+      attr_reader job_id: String
+      attr_reader agent: String
+      attr_reader status: String
+      attr_reader created_at: String?
+      attr_reader lease_expires_at: String?
+      attr_reader budget_remaining: Hash[String, String]?
+    end
+
+    class Result
+      attr_reader job_id: String
+      attr_reader final_status: String
+      attr_reader result: untyped
+      attr_reader result_id: String?
+      attr_reader result_size: Integer?
+      attr_reader completed_at: String?
+      def chunked?: () -> bool
+    end
+
+    class JobError
+      attr_reader job_id: String
+      attr_reader final_status: String
+      attr_reader code: String
+      attr_reader message: String?
+      attr_reader retryable: bool
+      attr_reader details: Hash[String, untyped]
+      def to_exception: () -> Arcp::Error
+    end
+  end
+end

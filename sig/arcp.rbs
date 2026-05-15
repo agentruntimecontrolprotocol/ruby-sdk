@@ -1,0 +1,5 @@
+module Arcp
+  VERSION: String
+  PROTOCOL_VERSION: String
+  SUBPROTOCOL: String
+end

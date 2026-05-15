@@ -1,0 +1,96 @@
+// ============================================================================
+//  Arcp::Job FSM (LIGHT variant)
+// ============================================================================
+
+digraph JobFSM {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#475569">Arcp::Job FSM — spec §7 §8 §9 §12</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="white",
+    color="#CBD5E1",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#1F2937",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#64748B",
+    color="#94A3B8",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  submit_sent [
+    label=<<FONT POINT-SIZE="12"><B>submit_sent</B></FONT>>,
+    fillcolor="#3B82F6", color="#2563EB",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  accepted [label="accepted"];
+
+  running [
+    label=<<FONT POINT-SIZE="12"><B>running</B></FONT>>,
+    fillcolor="#F59E0B", color="#D97706",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  running_sub [label="running_with_subscriber"];
+
+  success [
+    label="success",
+    shape=doublecircle, fillcolor="#dcfce7"
+  ];
+
+  err_cancelled [
+    label="error_cancelled",
+    shape=doublecircle, fillcolor="#fee2e2"
+  ];
+
+  err_timeout [
+    label="error_timeout",
+    shape=doublecircle, fillcolor="#fee2e2"
+  ];
+
+  err_lease [
+    label="error_lease_expired",
+    shape=doublecircle, fillcolor="#fee2e2"
+  ];
+
+  err_budget [
+    label="error_budget_exhausted",
+    shape=doublecircle, fillcolor="#fee2e2"
+  ];
+
+  // PRIMARY SPINE — happy path (§7.1, §7.6)
+  edge [color="#64748B", penwidth=1.2];
+  submit_sent -> accepted [label="recv job.accepted (§7.1)"];
+  accepted -> running [label="recv job.running (§7.6)"];
+  running -> running_sub [label="attach subscriber"];
+  running_sub -> running [label="subscriber detach"];
+  running -> success [label="recv job.result"];
+
+  // SECONDARY WIRING — error branches (§9.5, §9.6)
+  edge [color="#CBD5E1", penwidth=1.0];
+  running -> err_cancelled [label="job.cancel ack"];
+  running -> err_timeout [label="deadline_ms exceeded (§9.5)"];
+  running -> err_lease [label="lease expired (§9.6)"];
+  running -> err_budget [label="budget exhausted (§12)"];
+  accepted -> err_cancelled [label="cancel before run"];
+  submit_sent -> err_budget [label="job.reject budget"];
+}

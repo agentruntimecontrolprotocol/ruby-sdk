@@ -3,11 +3,13 @@
 /_yardoc/
 /coverage/
 /doc/
+/docs/api/
 /pkg/
 /*.gem
 /spec/reports/
 /tmp/
 /.rspec_status
+Gemfile.lock
 *.gem
 .DS_Store
 .rspec_status

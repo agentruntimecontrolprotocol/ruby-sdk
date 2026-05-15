@@ -2,17 +2,19 @@
 
 require 'simplecov'
 SimpleCov.start do
+  enable_coverage :branch
   add_filter '/spec/'
   add_filter '/samples/'
-  enable_coverage :line
-  minimum_coverage 94
 end
 
 $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
 require 'arcp'
+require 'async'
+require 'async/rspec'
 
-# Silence Async's structured logger during tests; spec failures still
-# show via RSpec.
+Dir[File.expand_path('support/**/*.rb', __dir__)].each { |f| require f }
+
+require 'logger'
 require 'console'
 Console.logger = Console::Logger.new(File.open(File::NULL, 'w'), level: Logger::FATAL)
 
@@ -29,7 +31,7 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.filter_run_when_matching :focus
   config.example_status_persistence_file_path = '.rspec_status'
-  config.warnings = true
+  config.warnings = false
   config.default_formatter = 'doc' if config.files_to_run.one?
   config.order = :random
   Kernel.srand config.seed

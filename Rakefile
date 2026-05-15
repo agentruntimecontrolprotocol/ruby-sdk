@@ -5,8 +5,11 @@ require 'bundler/gem_tasks'
 begin
   require 'rspec/core/rake_task'
   RSpec::Core::RakeTask.new(:spec)
+  RSpec::Core::RakeTask.new(:conformance) do |t|
+    t.pattern = 'spec/conformance/**/*_spec.rb'
+  end
 rescue LoadError
-  # rspec not yet available; rake build still works
+  # rspec not yet available
 end
 
 begin
@@ -14,6 +17,16 @@ begin
   RuboCop::RakeTask.new(:rubocop)
 rescue LoadError
   # rubocop not yet available
+end
+
+desc 'Render docs/diagrams/*.dot to .svg'
+task :diagrams do
+  sh 'bin/render-diagrams.sh'
+end
+
+desc 'Build YARD docs into docs/api/'
+task :docs do
+  sh 'yard doc'
 end
 
 task default: %i[spec rubocop]

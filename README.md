@@ -1,135 +1,135 @@
-# arcp — Ruby SDK for the Agent Runtime Control Protocol
+# arcp
 
-Reference Ruby implementation of the **Agent Runtime Control Protocol**
-([ARCP](RFC-0001-v2.md)) v1.0.
+Ruby SDK for ARCP v1. The wire protocol is specified in
+[../spec/docs/draft-arcp-02.1.md](../spec/docs/draft-arcp-02.1.md). This
+gem implements the full v1 envelope, session handshake, job lifecycle,
+event stream, leases, and error model.
 
-## Status
+## Install
 
-`v0.1.0` — protocol fundamentals are in. See
-[CONFORMANCE.md](CONFORMANCE.md) for what is implemented and what is
-deferred. The implementation prioritises correctness and readability
-over speed; idiomatic Ruby (Data.define, case/in, the async gem,
-fiber-local trace context) is used throughout.
+```ruby
+gem 'arcp', '~> 1.0'
+```
 
-## Requirements
-
-- Ruby 3.4+ (uses pattern matching, `Data.define`, fiber-local storage)
-- Bundler 2.x
+Requires Ruby 3.3+. Runs on the `socketry/async` reactor; pairs with
+`falcon` for hosting and `async-websocket` for the WebSocket transport.
 
 ## Quickstart
 
-```sh
-bundle install
-bundle exec rake          # rspec + rubocop
-bundle exec ruby samples/01_minimal_session.rb
+```ruby
+require 'async'
+require 'arcp'
+
+Sync do
+  runtime = Arcp::Runtime::Runtime.new(
+    auth_verifier: Arcp::Auth::Bearer.from_token('demo', principal_id: 'alice'),
+    heartbeat_interval_sec: nil
+  )
+  runtime.register_agent(
+    name: 'echo', versions: ['1.0.0'], default: '1.0.0',
+    handler: ->(ctx) {
+      ctx.progress(current: 1, total: 1, units: 'message')
+      ctx.finish(result: { 'echoed' => ctx.input })
+    }
+  )
+
+  server_t, client_t = Arcp::Transport::MemoryTransport.pair
+  server = Async { runtime.accept(server_t) }
+
+  client = Arcp::Client.open(
+    transport: client_t,
+    auth: { 'scheme' => 'bearer', 'token' => 'demo' }
+  )
+  handle = client.submit_job(agent: 'echo', input: { 'msg' => 'hi' })
+  handle.subscribe(client: client).each { |ev| puts ev.kind }
+  puts handle.get_result(client: client).result.inspect
+
+  client.close
+  server.stop
+end
 ```
 
-The `arcp` CLI is also installed by the gem (`bundle exec arcp`):
+## What is ARCP
 
-```
-arcp version
-arcp serve --transport stdio        # blocks on stdin/stdout
-arcp serve --transport ws --bind 127.0.0.1:7777
-arcp tail   path/to/event-log.sqlite
-arcp replay path/to/event-log.sqlite --after msg_xyz
-arcp send   ping '{}'
-```
+ARCP is a session-oriented protocol for invoking remote agents. A client
+opens a session, submits jobs, and receives a stream of structured events
+followed by a terminal result or error. The protocol covers capability
+negotiation, heartbeats, ordered acks, cursored job listing, cross-session
+observation, capability-bounded leases, and trace propagation.
+
+## Features
+
+- Capability negotiation (§6.2)
+- Heartbeat / ping-pong (§6.4)
+- Application-level ack (§6.5)
+- Cursored `list_jobs` (§6.6)
+- Cross-session `job.subscribe` with history replay (§7.6)
+- Agent versioning with `name@version` refs (§7.5)
+- `result_chunk` streaming with result_id terminator (§8.4)
+- `progress` events (§8.2)
+- `lease_constraints.expires_at` (§9)
+- `cost.budget` capability with `BigDecimal` arithmetic (§9.6)
+- Resume token + last_event_seq replay (§6.3)
+- Trace context propagation (§11)
 
 ## Architecture
 
 ```
-+-------------------------+        +---------------------------+
-|  Arcp::Client::Client   |  <-->  |  Arcp::Runtime::Runtime   |
-|  - open / invoke / ping |        |  - SessionNegotiator      |
-|  - cancel / interrupt   |        |  - JobManager             |
-|  - on_human_input       |        |  - StreamManager          |
-|  - on_permission        |        |  - LeaseManager           |
-+-------------------------+        |  - SubscriptionManager    |
-            ^                      |  - ArtifactStore          |
-            |                      |  - Store::EventLog        |
-            v                      +---------------------------+
-   +------------------+
-   |  Arcp::Transport |   Memory | Stdio | WebSocket
-   +------------------+
+Arcp::Client            # session-oriented client
+Arcp::Runtime::Runtime  # server-side runtime; accepts transports
+Arcp::Runtime::JobContext # passed to agent handlers
+Arcp::Session::*        # Hello, Welcome, CapabilitySet, Feature, AgentInventory, ...
+Arcp::Job::*            # Submit, Accepted, Event, Result, JobError, Handle, Summary
+Arcp::Job::EventKind    # 10 standard kinds
+Arcp::Lease::*          # Lease, LeaseRequest, LeaseConstraints, CostBudget, Subsetting
+Arcp::Transport::*      # MemoryTransport, WebSocketTransport, StdioTransport
+Arcp::Auth::*           # AuthScheme, Bearer, Principal
+Arcp::Errors::*         # 15 wire codes + 3 internal-only
+Arcp::Trace             # Fiber-local Context, span helpers
 ```
 
-### Layered responsibilities
+## Transports
 
-| Layer        | Files                                                        | Notes                                                              |
-| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------------ |
-| Envelope     | `lib/arcp/envelope.rb`, `lib/arcp/json.rb`                   | `Data.define`, structural equality, JSON encode/decode             |
-| Errors       | `lib/arcp/error.rb`, `lib/arcp/error_code.rb`                | Canonical taxonomy as frozen constants; subclass per code          |
-| Messages     | `lib/arcp/messages/*.rb`                                     | Each wire type → `Data.define` payload, registered                 |
-| Transport    | `lib/arcp/transport/*.rb`                                    | Memory (tests), stdio, WebSocket                                   |
-| Runtime      | `lib/arcp/runtime/*.rb`                                      | Per-session managers + dispatcher                                  |
-| Client       | `lib/arcp/client/client.rb`                                  | Synchronous-style API on the same fiber reactor                    |
-| Storage      | `lib/arcp/store/event_log.rb`                                | SQLite event log + idempotency table                               |
-| CLI          | `lib/arcp/cli.rb`, `exe/arcp`                                | `dry-cli` commands                                                 |
+- `Arcp::Transport::MemoryTransport.pair` — in-process queue pair. Tests, embedded clients.
+- `Arcp::Transport::WebSocketTransport` — wraps an `Async::WebSocket::Connection`. Production transport.
+- `Arcp::Transport::StdioTransport` — newline-delimited JSON over a pair of IOs. Co-process agents.
 
-## Concurrency model
+## Deployment
 
-Ruby has no algebraic data types and no compile-time exhaustiveness
-check. We close those gaps with:
+Run the runtime as a daemon under the `socketry/async` reactor. Host
+WebSocket endpoints with `falcon`. The runtime is fiber-based and
+multiplexes sessions on the reactor; do not deploy under
+request-per-thread servers like Puma.
 
-- **`Data.define`** for envelope, IDs, and message payloads — immutable
-  value objects with structural equality.
-- **`case/in` pattern matching** for typed dispatch on payload class.
-- **The `async` gem** for fiber-based concurrency: synchronous-style
-  code suspends on IO, with structured concurrency baked into the task
-  tree.
-- **`Async::Notification`** for one-shot wait/signal across fibers
-  (used by `PendingRegistry`).
-- **`Fiber[:arcp_trace]`** for trace context propagation (§17.1).
+## Errors
 
-See [PLAN.md](PLAN.md) for the per-section plan and design notes.
+15 wire codes, each mapped to an `Arcp::Errors::*` subclass with a
+`retryable?` default: `Cancelled`, `InvalidRequest`, `Unauthenticated`,
+`PermissionDenied`, `JobNotFound`, `AgentNotAvailable`, `DuplicateKey`,
+`RateLimited`, `Internal`, `HeartbeatLost`, `Backpressure`,
+`ProtocolViolation`, `Timeout`, `ResumeWindowExpired`,
+`LeaseSubsetViolation`, `AgentVersionNotAvailable`, `LeaseExpired`,
+`BudgetExhausted`. Three additional codes are library-internal and never
+appear on the wire (`UNNEGOTIATED_FEATURE`, plus the abstract
+`Arcp::Error` base and the generic `Internal` fallback).
 
-## Samples
+## Documentation
 
-Each sample is self-contained: it spawns an in-memory runtime + client
-and exercises one feature.
+See `docs/` for guides, concepts, and reference. Start with
+`docs/getting-started.md`.
 
-| File                                       | Demonstrates                                       |
-| ------------------------------------------ | -------------------------------------------------- |
-| `samples/01_minimal_session.rb`            | Handshake, ping/pong, close                        |
-| `samples/02_tool_invoke_with_progress.rb`  | `tool.invoke` with `job.progress` + a text stream  |
-| `samples/03_human_input_request.rb`        | `human.input.request` with schema validation       |
-| `samples/04_permission_challenge.rb`       | `permission.request` → `permission.grant` → lease  |
-| `samples/05_observer_subscription.rb`      | Subscribe, observe events, hit backfill marker     |
-| `samples/06_relay_human_in_the_loop.rb`    | Combined human input + permission relay flow       |
+## Conformance
 
-## RFC mapping
+Spec-to-code matrix in [CONFORMANCE.md](CONFORMANCE.md).
 
-| RFC §  | Implementation                                            | Status                          |
-| -----  | --------------------------------------------------------- | ------------------------------- |
-| §6     | `Arcp::Envelope`, `Arcp::Json`                            | Full                            |
-| §7     | `Arcp::Capabilities`                                      | Full                            |
-| §8     | `Arcp::Auth::{Bearer,Jwt}`, `Arcp::Runtime::SessionNegotiator` | `bearer`, `signed_jwt`, `none`; `mtls`/`oauth2` deferred |
-| §9     | `SessionContext`                                          | Stateless + stateful; durable across reconnect deferred |
-| §10    | `JobManager`                                              | Heartbeats, cancellation, interrupts; scheduled jobs deferred |
-| §11    | `StreamManager`                                           | Base64 in-envelope only; sidecar deferred              |
-| §12    | `SessionHelper#request_human_input`                       | Includes default + expiration                          |
-| §13    | `SubscriptionManager`                                     | Filter, backfill, `subscription.backfill_complete`     |
-| §14    | —                                                          | Out of scope for v0.1                                  |
-| §15    | `LeaseManager`, `SessionHelper#request_permission`        | Trust elevation deferred                               |
-| §16    | `ArtifactStore`                                           | Inline base64 only                                     |
-| §17    | `Tracing`, `Messages::Telemetry::*`                       | `log`, `metric`, `trace.span`                          |
-| §18    | `Arcp::Error*`                                            | Full canonical taxonomy                                |
-| §19    | `Runtime#handle_resume`                                   | Message-id resume only; checkpoint deferred            |
-| §21    | `Arcp::Extensions`, `Arcp::ExtensionRegistry`             | Full                                                   |
-| §22    | `Arcp::Transport::{Memory,Stdio,Websocket}`               | WebSocket + stdio mandatory; HTTP/2 + QUIC deferred    |
+## Development
 
-## Running the test suite
-
-```sh
-bundle exec rspec --format documentation
-bundle exec rubocop
-bundle exec yard --fail-on-warning
-bundle exec rake build
 ```
-
-The relay scenario at `spec/e2e/relay_scenario_spec.rb` runs the same
-flow over the memory and stdio transports as a shared example.
+bundle install
+bundle exec rake          # spec + rubocop + steep
+bundle exec rake docs     # build doc tree
+```
 
 ## License
 
-Apache-2.0.
+Apache-2.0. See `LICENSE`.

@@ -1,0 +1,98 @@
+// ============================================================================
+//  Capability negotiation sequence (LIGHT variant)
+// ============================================================================
+
+digraph CapabilityNegotiation {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#475569">Capability negotiation — spec §6.2</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="white",
+    color="#CBD5E1",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#1F2937",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#64748B",
+    color="#94A3B8",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  subgraph cluster_client {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Client</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#F1F5F9";
+    color="#E2E8F0";
+    fontname="Helvetica";
+    fontcolor="#475569";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    client_1 [
+      label=<<FONT POINT-SIZE="12"><B>Build CapabilitySet</B></FONT>>,
+      fillcolor="#3B82F6", color="#2563EB",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    client_2 [label="Emit session.hello"];
+    client_3 [label="Decode welcome + freeze effective"];
+
+    client_1 -> client_2 [style=invis];
+    client_2 -> client_3 [style=invis];
+  }
+
+  subgraph cluster_runtime {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Runtime</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#F8FAFC";
+    color="#E2E8F0";
+    fontname="Helvetica";
+    fontcolor="#475569";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    runtime_1 [label="Decode hello"];
+
+    runtime_2 [
+      label=<<FONT POINT-SIZE="12"><B>Intersect with local features</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    runtime_3 [label="Emit session.welcome"];
+
+    runtime_1 -> runtime_2 [style=invis];
+    runtime_2 -> runtime_3 [style=invis];
+  }
+
+  // PRIMARY SPINE — cross-lane messages
+  edge [color="#64748B", penwidth=1.2];
+  client_2 -> runtime_1 [label="session.hello"];
+  runtime_3 -> client_3 [label="session.welcome"];
+
+  // SECONDARY WIRING — same-lane progression
+  edge [color="#CBD5E1", penwidth=1.0];
+  client_1 -> client_2 [label="serialize caps"];
+  runtime_1 -> runtime_2 [label="parse offered"];
+  runtime_2 -> runtime_3 [label="encode effective"];
+}

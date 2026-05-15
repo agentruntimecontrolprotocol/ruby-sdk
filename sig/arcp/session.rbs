@@ -1,0 +1,56 @@
+module Arcp
+  module Session
+    module Feature
+      HEARTBEAT: String
+      ACK: String
+      LIST_JOBS: String
+      SUBSCRIBE: String
+      LEASE_EXPIRES_AT: String
+      COST_BUDGET: String
+      PROGRESS: String
+      RESULT_CHUNK: String
+      AGENT_VERSIONS: String
+      ALL: Array[String]
+    end
+
+    class CapabilitySet
+      attr_reader features: Array[String]
+      attr_reader encodings: Array[String]
+      attr_reader agents: AgentInventory?
+      def self.local: (?features: Array[String], ?encodings: Array[String], ?agents: AgentInventory?) -> CapabilitySet
+      def intersect: (CapabilitySet) -> CapabilitySet
+      def supports?: (String) -> bool
+      def to_h: () -> Hash[String, untyped]
+    end
+
+    class AgentEntry
+      attr_reader name: String
+      attr_reader versions: Array[String]
+      attr_reader default: String?
+      def self.from_hash: (Hash[String | Symbol, untyped]) -> AgentEntry
+      def to_h: () -> Hash[String, untyped]
+    end
+
+    class AgentInventory
+      attr_reader entries: Array[AgentEntry]
+      def self.from_array: (Array[Hash[String | Symbol, untyped]]) -> AgentInventory
+      def to_a: () -> Array[Hash[String, untyped]]
+      def find: (String) -> AgentEntry?
+      def default_for: (String) -> String?
+      def versions_for: (String) -> Array[String]
+      def names: () -> Array[String]
+      def resolve: (String) -> String?
+    end
+
+    class Info
+      attr_reader id: String
+      attr_reader runtime_version: String
+      attr_reader capabilities: CapabilitySet
+      attr_reader agents: AgentInventory?
+      attr_reader heartbeat_interval_sec: Integer?
+      attr_reader resume_token: String?
+      attr_reader resume_window_sec: Integer?
+      def supports?: (String) -> bool
+    end
+  end
+end

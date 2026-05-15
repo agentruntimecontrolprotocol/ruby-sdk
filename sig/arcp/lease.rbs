@@ -1,0 +1,39 @@
+module Arcp
+  module Lease
+    class LeaseConstraints
+      attr_reader expires_at: String?
+      attr_reader max_budget: Hash[String, untyped]?
+      def self.from_h: (Hash[String | Symbol, untyped]?) -> LeaseConstraints?
+      def to_h: () -> Hash[String, untyped]
+      def validate!: () -> void
+    end
+
+    class CostBudget
+      attr_reader per_currency: Hash[String, BigDecimal]
+      def self.parse: (Array[String]) -> CostBudget
+      def to_a: () -> Array[String]
+      def to_h: () -> Hash[String, untyped]
+      def remaining: (String) -> BigDecimal
+      def currencies: () -> Array[String]
+    end
+
+    class LeaseRequest
+      attr_reader capabilities: Array[String]
+      attr_reader budget: CostBudget?
+      attr_reader expires_at: String?
+      def self.from_h: (Hash[String | Symbol, untyped]?) -> LeaseRequest?
+      def to_h: () -> Hash[String, untyped]
+    end
+
+    class Lease
+      attr_reader id: String
+      attr_reader capabilities: Array[String]
+      attr_reader budget: CostBudget?
+      attr_reader expires_at: String?
+      attr_reader issued_at: String
+      def self.from_h: (Hash[String | Symbol, untyped]) -> Lease
+      def to_h: () -> Hash[String, untyped]
+      def expired?: (Time) -> bool
+    end
+  end
+end

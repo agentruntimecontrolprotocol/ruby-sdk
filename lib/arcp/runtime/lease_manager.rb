@@ -1,115 +1,74 @@
 # frozen_string_literal: true
 
-require 'arcp/error'
-require 'arcp/error_code'
-require 'arcp/ids'
-require 'arcp/messages/permissions'
-
 module Arcp
   module Runtime
-    # Materialized lease record (§15.5).
-    class LeaseRecord
-      attr_reader :lease_id, :session_id, :permission, :resource, :operation, :expires_at, :state
-
-      def initialize(lease_id:, session_id:, permission:, resource:, operation:, expires_at:)
-        @lease_id = lease_id
-        @session_id = session_id
-        @permission = permission
-        @resource = resource
-        @operation = operation
-        @expires_at = expires_at
-        @state = :granted
-      end
-
-      def expired?(now)
-        @state != :revoked && now >= @expires_at
-      end
-
-      def revoke!
-        @state = :revoked
-      end
-
-      def extend!(new_expires_at)
-        @expires_at = new_expires_at
-      end
-    end
-
-    # Manages permission grants and lease lifecycle (§15.4, §15.5).
+    # Tracks per-job leases and bound budget counters. The runtime asks
+    # `#check!(job_id, capability:)` before every authority op.
     class LeaseManager
-      # @param emit [#call(record, payload)]
-      # @param clock [#now]
-      def initialize(emit:, clock: Time)
-        @emit = emit
+      def initialize(clock: Arcp::SystemClock.new)
         @clock = clock
         @leases = {}
+        @counters = {}
         @mutex = Mutex.new
       end
 
-      # @return [Arcp::Runtime::LeaseRecord]
-      def grant(session_id:, permission:, resource:, operation:, lease_seconds:)
-        lease_id = LeaseId.random
-        expires_at = @clock.now + lease_seconds
-        record = LeaseRecord.new(
-          lease_id: lease_id, session_id: session_id,
-          permission: permission, resource: resource,
-          operation: operation, expires_at: expires_at
-        )
-        @mutex.synchronize { @leases[lease_id.value] = record }
-        @emit.call(record, Messages::Permissions::LeaseGranted.new(
-                             lease_id: lease_id.value, permission: permission, resource: resource,
-                             operation: operation, expires_at: expires_at.utc.iso8601(6)
-                           ))
-        record
+      def register(job_id, lease)
+        @mutex.synchronize do
+          @leases[job_id] = lease
+          @counters[job_id] = Arcp::Lease::BudgetCounter.new(initial: lease.budget&.per_currency&.dup || {})
+        end
+        lease
       end
 
-      def extend_lease(lease_id, extend_seconds:)
-        record = @mutex.synchronize { @leases[id_value(lease_id)] }
-        raise Arcp::Error::NotFound, "lease not found: #{lease_id}" if record.nil?
+      def get(job_id) = @mutex.synchronize { @leases[job_id] }
+      def counter(job_id) = @mutex.synchronize { @counters[job_id] }
 
-        new_expires = @clock.now + extend_seconds
-        record.extend!(new_expires)
-        @emit.call(record, Messages::Permissions::LeaseExtended.new(
-                             lease_id: record.lease_id.value, expires_at: new_expires.utc.iso8601(6)
-                           ))
-        record
+      def check!(job_id, capability:)
+        lease = get(job_id)
+        return if lease.nil?
+
+        if lease.expired?(@clock.now)
+          raise Arcp::Errors::LeaseExpired.new(
+            "lease #{lease.id} expired at #{lease.expires_at}",
+            details: { 'lease_id' => lease.id }
+          )
+        end
+
+        unless lease.capabilities.include?(capability)
+          raise Arcp::Errors::PermissionDenied.new(
+            "capability #{capability.inspect} not in lease #{lease.id}",
+            details: { 'capability' => capability, 'lease_id' => lease.id }
+          )
+        end
       end
 
-      def revoke(lease_id, reason: nil)
-        record = @mutex.synchronize { @leases[id_value(lease_id)] }
-        return false if record.nil? || record.state == :revoked
+      # Try to decrement the bound budget. Returns true on success, raises
+      # BudgetExhausted if no balance covers the amount. Straight-line —
+      # no scheduler-yielding calls between read and write.
+      def try_spend!(job_id, currency, amount)
+        counter = self.counter(job_id)
+        return true if counter.nil?
+        return true if counter.get(currency).zero? && !counter.remaining.key?(currency)
 
-        record.revoke!
-        @emit.call(record, Messages::Permissions::LeaseRevoked.new(
-                             lease_id: record.lease_id.value, reason: reason
-                           ))
+        unless counter.try_decrement(currency, amount)
+          raise Arcp::Errors::BudgetExhausted.new(
+            "budget #{currency} exhausted",
+            details: { 'currency' => currency, 'remaining' => counter.get(currency).to_s('F') }
+          )
+        end
         true
       end
 
-      # Validate that a lease is currently usable.
-      #
-      # @raise [Arcp::Error::LeaseExpired] if expired
-      # @raise [Arcp::Error::LeaseRevoked] if revoked
-      # @raise [Arcp::Error::NotFound] if absent
-      def validate!(lease_id)
-        record = @mutex.synchronize { @leases[id_value(lease_id)] }
-        raise Arcp::Error::NotFound, "lease not found: #{lease_id}" if record.nil?
-        raise Arcp::Error::LeaseRevoked.new(lease_id: record.lease_id) if record.state == :revoked
-        if record.expired?(@clock.now)
-          raise Arcp::Error::LeaseExpired.new(lease_id: record.lease_id,
-                                              expired_at: record.expires_at)
+      def remaining(job_id)
+        c = counter(job_id)
+        c ? c.snapshot : {}
+      end
+
+      def revoke(job_id)
+        @mutex.synchronize do
+          @leases.delete(job_id)
+          @counters.delete(job_id)
         end
-
-        record
-      end
-
-      def lookup(lease_id)
-        @mutex.synchronize { @leases[id_value(lease_id)] }
-      end
-
-      private
-
-      def id_value(lease_id)
-        lease_id.respond_to?(:value) ? lease_id.value : lease_id
       end
     end
   end

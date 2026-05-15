@@ -1,0 +1,40 @@
+module Arcp
+  class Error < StandardError
+    CODE: String
+    attr_reader details: Hash[untyped, untyped]
+    def initialize: (?String?, ?details: Hash[untyped, untyped]) -> void
+    def code: () -> String
+    def retryable?: () -> bool
+    def to_payload: (?trace_id: String?) -> Hash[Symbol, untyped]
+  end
+
+  module Errors
+    class Cancelled < Arcp::Error end
+    class InvalidRequest < Arcp::Error end
+    class Unauthenticated < Arcp::Error end
+    class PermissionDenied < Arcp::Error end
+    class JobNotFound < Arcp::Error end
+    class AgentNotAvailable < Arcp::Error end
+    class DuplicateKey < Arcp::Error end
+    class RateLimited < Arcp::Error end
+    class Internal < Arcp::Error end
+    class HeartbeatLost < Arcp::Error end
+    class Backpressure < Arcp::Error end
+    class ProtocolViolation < Arcp::Error end
+    class Timeout < Arcp::Error end
+    class ResumeWindowExpired < Arcp::Error end
+    class LeaseSubsetViolation < Arcp::Error end
+    class AgentVersionNotAvailable < Arcp::Error end
+    class LeaseExpired < Arcp::Error end
+    class BudgetExhausted < Arcp::Error end
+    class UnnegotiatedFeature < Arcp::Error end
+
+    ALL: Array[singleton(Arcp::Error)]
+    WIRE_CODES: Array[String]
+    BY_CODE: Hash[String, singleton(Arcp::Error)]
+    RETRYABLE_BY_DEFAULT: Array[String]
+    NON_RETRYABLE_BY_DEFAULT: Array[String]
+
+    def self.for: (String, ?message: String?, ?details: Hash[untyped, untyped]) -> Arcp::Error
+  end
+end

@@ -1,0 +1,25 @@
+module Arcp
+  class Envelope
+    attr_reader arcp: String
+    attr_reader id: String
+    attr_reader type: String
+    attr_reader session_id: String
+    attr_reader trace_id: String?
+    attr_reader job_id: String?
+    attr_reader event_seq: Integer?
+    attr_reader payload: Hash[String, untyped]
+
+    def self.build: (type: String, session_id: String, payload: Hash[String | Symbol, untyped], ?trace_id: String?, ?job_id: String?, ?event_seq: Integer?, ?id: String?) -> Envelope
+    def self.from_h: (Hash[String | Symbol, untyped]) -> Envelope
+    def self.from_json: (String) -> Envelope
+    def to_h: () -> Hash[String, untyped]
+    def to_json: (*untyped) -> String
+    def known?: () -> bool
+  end
+
+  class UnknownEnvelope
+    attr_reader envelope: Envelope
+    def type: () -> String
+    def payload: () -> Hash[String, untyped]
+  end
+end

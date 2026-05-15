@@ -1,0 +1,8 @@
+module Arcp
+  module Serializer
+    def self.backend: () -> Symbol
+    def self.backend=: (Symbol) -> Symbol
+    def self.dump: (untyped) -> String
+    def self.load: (String?) -> untyped
+  end
+end

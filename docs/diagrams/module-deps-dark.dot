@@ -1,0 +1,125 @@
+// ============================================================================
+//  Arcp Ruby SDK — Module dependency graph (DARK variant)
+// ============================================================================
+
+digraph ArcpModuleDeps {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#94A3B8">Arcp SDK module dependency graph</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#334155",
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#F1F5F9",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#94A3B8",
+    color="#64748B",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  subgraph cluster_client {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Client surface</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#0F172A";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    Client [
+      label=<<FONT POINT-SIZE="12"><B>Arcp::Client</B></FONT>>,
+      fillcolor="#3B82F6", color="#2563EB",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    Envelope [label="Arcp::Envelope"];
+    Session  [label="Arcp::Session"];
+    Job      [label="Arcp::Job"];
+    Lease    [label="Arcp::Lease"];
+    Errors   [label="Arcp::Errors"];
+    Auth     [label="Arcp::Auth"];
+    Trace    [label="Arcp::Trace"];
+  }
+
+  Transport [label="Arcp::Transport"];
+
+  subgraph cluster_runtime {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Runtime internals</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#1E293B";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    Runtime [
+      label=<<FONT POINT-SIZE="12"><B>Arcp::Runtime::Runtime</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    JobMgr  [label="JobManager"];
+    LeaseMgr [label="LeaseManager"];
+    SubMgr  [label="SubscriptionManager"];
+
+    EventLog [
+      label=<<FONT POINT-SIZE="10">EventLog</FONT><BR/><FONT POINT-SIZE="8" COLOR="#64748B">SQLite</FONT>>,
+      shape=cylinder, fillcolor="#1E293B"
+    ];
+  }
+
+  Client -> Transport [label="frames"];
+  Transport -> Runtime [lhead=cluster_runtime, label="dispatch"];
+
+  edge [color="#94A3B8", penwidth=1.2];
+  Client -> Envelope;
+  Client -> Session;
+  Client -> Job;
+  Client -> Lease;
+
+  Runtime -> JobMgr;
+  Runtime -> LeaseMgr;
+  Runtime -> SubMgr;
+
+  edge [color="#475569", penwidth=1.0];
+  Client -> Errors;
+  Client -> Auth;
+  Client -> Trace;
+  Session -> Envelope;
+  Job -> Envelope;
+  Lease -> Envelope;
+
+  JobMgr -> EventLog;
+  LeaseMgr -> EventLog;
+  SubMgr -> EventLog;
+
+  Runtime -> Transport [
+    style=dashed, color="#F472B6", penwidth=1.1,
+    constraint=false,
+    label=<<FONT COLOR="#F472B6">events</FONT>>, fontsize=9,
+    ltail=cluster_runtime
+  ];
+}

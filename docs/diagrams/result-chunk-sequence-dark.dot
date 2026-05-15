@@ -1,0 +1,138 @@
+// ============================================================================
+//  result_chunk streaming sequence (DARK variant)
+// ============================================================================
+
+digraph ResultChunkSequence {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#94A3B8">result_chunk streaming — spec §8.4</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#334155",
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#F1F5F9",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#94A3B8",
+    color="#64748B",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  subgraph cluster_agent {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Agent</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#0F172A";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    agent_1 [
+      label=<<FONT POINT-SIZE="12"><B>begin streaming — result_id allocated</B></FONT>>,
+      fillcolor="#3B82F6", color="#2563EB",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    agent_2 [label="emit result_chunk seq=0 more=true"];
+    agent_3 [label="emit result_chunk seq=1 more=true"];
+    agent_final [label="result_chunk seq=2 more=false"];
+    agent_terminator [label="emit job.result {result_id, result_size}"];
+
+    agent_1 -> agent_2 [style=invis];
+    agent_2 -> agent_3 [style=invis];
+    agent_3 -> agent_final [style=invis];
+    agent_final -> agent_terminator [style=invis];
+  }
+
+  subgraph cluster_runtime {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Runtime</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#1E293B";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    runtime_1 [label="register result_id"];
+    runtime_2 [label="relay chunk seq=0"];
+
+    runtime_relay [
+      label=<<FONT POINT-SIZE="12"><B>relay chunk seq=1</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    runtime_final [label="relay chunk seq=2 (terminal)"];
+    runtime_terminator [label="forward job.result"];
+
+    runtime_1 -> runtime_2 [style=invis];
+    runtime_2 -> runtime_relay [style=invis];
+    runtime_relay -> runtime_final [style=invis];
+    runtime_final -> runtime_terminator [style=invis];
+  }
+
+  subgraph cluster_client {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Client</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#0F172A";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    client_1 [label="allocate buffer"];
+    client_2 [label="append chunk seq=0"];
+    client_3 [label="append chunk seq=1"];
+    client_final [label="append chunk seq=2 (terminal)"];
+    client_terminator [label="assemble decoded chunks"];
+
+    client_1 -> client_2 [style=invis];
+    client_2 -> client_3 [style=invis];
+    client_3 -> client_final [style=invis];
+    client_final -> client_terminator [style=invis];
+  }
+
+  edge [color="#94A3B8", penwidth=1.2];
+  agent_1 -> runtime_1 [label="open stream"];
+  agent_2 -> runtime_2 [label="seq=0"];
+  agent_3 -> runtime_relay [label="seq=1"];
+  agent_final -> runtime_final [label="seq=2 more=false"];
+  agent_terminator -> runtime_terminator [label="job.result"];
+
+  runtime_2 -> client_2;
+  runtime_relay -> client_3;
+  runtime_final -> client_final;
+  runtime_terminator -> client_terminator;
+  runtime_1 -> client_1 [label="result_id"];
+
+  agent_terminator -> client_terminator [
+    style=dashed, color="#F472B6", penwidth=1.1,
+    constraint=false,
+    label=<<FONT COLOR="#F472B6">MUST NOT mix inline result with result_chunk (§8.4)</FONT>>, fontsize=9
+  ];
+
+}

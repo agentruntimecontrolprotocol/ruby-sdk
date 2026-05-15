@@ -1,0 +1,123 @@
+// ============================================================================
+//  Heartbeat liveness flow (LIGHT variant)
+// ============================================================================
+
+digraph HeartbeatFlow {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#475569">Heartbeat liveness — spec §6.4</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="white",
+    color="#CBD5E1",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#1F2937",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#64748B",
+    color="#94A3B8",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  t0 [
+    label=<<FONT POINT-SIZE="12"><B>interval starts</B></FONT>>,
+    fillcolor="#3B82F6", color="#2563EB",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  subgraph cluster_client {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Client</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#F1F5F9";
+    color="#E2E8F0";
+    fontname="Helvetica";
+    fontcolor="#475569";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    client_1 [
+      label=<<FONT POINT-SIZE="12"><B>30s idle → emit session.ping</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    client_2 [label="recv pong → reset timer"];
+    client_3 [label="recv ping → emit pong"];
+
+    client_1 -> client_2 [style=invis];
+    client_2 -> client_3 [style=invis];
+  }
+
+  subgraph cluster_runtime {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Arcp::Runtime</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#F8FAFC";
+    color="#E2E8F0";
+    fontname="Helvetica";
+    fontcolor="#475569";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    runtime_1 [label="recv ping → emit pong"];
+    runtime_2 [label="30s idle → emit ping"];
+    runtime_3 [label="recv pong → reset timer"];
+
+    runtime_4 [label="2× interval silence after p2"];
+    runtime_5 [
+      label="close transport + HEARTBEAT_LOST",
+      shape=doublecircle, fillcolor="#fee2e2"
+    ];
+    runtime_6 [label="MUST NOT terminate jobs"];
+
+    runtime_1 -> runtime_2 [style=invis];
+    runtime_2 -> runtime_3 [style=invis];
+    runtime_3 -> runtime_4 [style=invis];
+    runtime_4 -> runtime_5 [style=invis];
+    runtime_5 -> runtime_6 [style=invis];
+  }
+
+  // PRIMARY SPINE — ping/pong cycles
+  edge [color="#64748B", penwidth=1.2];
+  t0 -> client_1;
+  client_1 -> runtime_1 [label="session.ping"];
+  runtime_1 -> client_2 [label="session.pong"];
+
+  runtime_2 -> client_3 [label="session.ping"];
+  client_3 -> runtime_3 [label="session.pong"];
+
+  // SECONDARY WIRING — failure branch
+  edge [color="#CBD5E1", penwidth=1.0];
+  runtime_3 -> runtime_4 [label="no traffic"];
+  runtime_4 -> runtime_5;
+  runtime_5 -> runtime_6;
+
+  // Cycle progression on the client lane
+  client_2 -> client_3 [color="#CBD5E1", style=dotted, label="next cycle"];
+
+  // FEEDBACK NOTE — heartbeats not in event_seq
+  runtime_1 -> client_1 [
+    style=dashed, color="#F472B6", penwidth=1.1,
+    constraint=false,
+    label=<<FONT COLOR="#DB2777">heartbeats not in event_seq</FONT>>, fontsize=9
+  ];
+
+}

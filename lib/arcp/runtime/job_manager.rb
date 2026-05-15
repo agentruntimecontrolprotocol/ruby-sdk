@@ -1,299 +1,233 @@
 # frozen_string_literal: true
 
 require 'async'
-
-require 'arcp/error'
-require 'arcp/error_code'
-require 'arcp/ids'
-require 'arcp/messages/control'
-require 'arcp/messages/execution'
+require 'async/queue'
+require 'time'
 
 module Arcp
   module Runtime
-    # State machine constants for jobs (§10.2).
-    module JobState
-      ACCEPTED  = :accepted
-      QUEUED    = :queued
-      RUNNING   = :running
-      BLOCKED   = :blocked
-      PAUSED    = :paused
-      COMPLETED = :completed
-      FAILED    = :failed
-      CANCELLED = :cancelled
+    AgentRegistration = Data.define(:name, :versions, :default, :handler)
 
-      TERMINAL = [COMPLETED, FAILED, CANCELLED].freeze
-      ALL      = [ACCEPTED, QUEUED, RUNNING, BLOCKED, PAUSED, COMPLETED, FAILED, CANCELLED].freeze
-
-      ALLOWED_TRANSITIONS = {
-        ACCEPTED => [QUEUED, RUNNING, CANCELLED, FAILED].freeze,
-        QUEUED => [RUNNING, CANCELLED, FAILED].freeze,
-        RUNNING => [BLOCKED, PAUSED, COMPLETED, FAILED, CANCELLED].freeze,
-        BLOCKED => [RUNNING, CANCELLED, FAILED].freeze,
-        PAUSED => [RUNNING, CANCELLED, FAILED].freeze,
-        COMPLETED => [].freeze,
-        FAILED => [].freeze,
-        CANCELLED => [].freeze
-      }.freeze
+    JobRecord = Data.define(:job_id, :agent, :principal_id, :status, :created_at,
+                            :input, :submitter_session_id, :task) do
+      def with(**kw) = self.class.new(**to_h.merge(kw))
     end
 
-    # Per-job mutable record managed by the JobManager.
-    class JobRecord
-      attr_reader :job_id, :session_id, :tool, :arguments, :state,
-                  :sequence, :last_heartbeat_at, :cancellation_deadline,
-                  :correlation_id, :trace_id
-
-      def initialize(job_id:, session_id:, tool:, arguments:, clock:,
-                     correlation_id: nil, trace_id: nil)
-        @job_id = job_id
-        @session_id = session_id
-        @tool = tool
-        @arguments = arguments
-        @clock = clock
-        @correlation_id = correlation_id
-        @trace_id = trace_id
-        @state = JobState::ACCEPTED
-        @sequence = 0
-        @last_heartbeat_at = clock.now
-        @cancellation_deadline = nil
-      end
-
-      def transition!(target)
-        unless JobState::ALLOWED_TRANSITIONS.fetch(@state).include?(target)
-          raise Arcp::Error::FailedPrecondition,
-                "illegal transition #{@state} -> #{target} for job #{@job_id}"
-        end
-        @state = target
-      end
-
-      def terminal?
-        JobState::TERMINAL.include?(@state)
-      end
-
-      def next_sequence!
-        @sequence += 1
-      end
-
-      def record_heartbeat!
-        @last_heartbeat_at = @clock.now
-      end
-
-      def request_cancellation!(deadline_seconds)
-        @cancellation_deadline = @clock.now + deadline_seconds
-      end
-    end
-
-    # Manages job lifecycle, heartbeats, and cancellation.
-    #
-    # The JobManager is fiber-aware: each `start` spawns a child task
-    # of the parent task. `cancel!` cooperatively terminates within a
-    # deadline before escalating to `task.stop`.
+    # Owns agent registry + per-job lifecycle. Submitted jobs run as
+    # child `Async::Task`s; cancellation propagates via `task.stop`.
     class JobManager
-      DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30
-      DEFAULT_HEARTBEAT_MISSES_BEFORE_FAIL = 2
-
-      attr_reader :records, :cancel_reason
-
-      # @param clock [#now]
-      # @param heartbeat_interval_seconds [Numeric]
-      # @param heartbeat_recovery [String] 'fail' or 'block'
-      # @param emit [#call] called with each emitted payload
-      def initialize(emit:, clock: Time, heartbeat_interval_seconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
-                     heartbeat_recovery: 'fail')
+      def initialize(runtime:, lease_manager:, subscription_manager:, event_log:, clock: Arcp::SystemClock.new)
+        @runtime = runtime
+        @leases = lease_manager
+        @subs = subscription_manager
+        @event_log = event_log
         @clock = clock
-        @heartbeat_interval_seconds = heartbeat_interval_seconds
-        @heartbeat_recovery = heartbeat_recovery
-        @emit = emit
-        @records = {}
-        @tasks = {}
+        @agents = {}                    # name => AgentRegistration
+        @jobs = {}                      # job_id => JobRecord
+        @event_seq = Hash.new(0)        # job_id => last emitted seq
+        @idempotency = {}               # [principal, key] => job_id
         @mutex = Mutex.new
       end
 
-      # Accept a job for execution; return its id.
-      #
-      # @param session_id [Arcp::SessionId]
-      # @param tool [String]
-      # @param arguments [Hash]
-      # @return [Arcp::JobId]
-      def accept(session_id:, tool:, arguments:, correlation_id: nil, trace_id: nil)
-        job_id = JobId.random
-        record = JobRecord.new(
-          job_id: job_id, session_id: session_id,
-          tool: tool, arguments: arguments, clock: @clock,
-          correlation_id: correlation_id, trace_id: trace_id
-        )
-        @mutex.synchronize { @records[job_id.value] = record }
-        @emit.call(record, Messages::Execution::JobAccepted.new(detail: nil))
-        job_id
-      end
-
-      # Start a job under a parent task. Yields a `JobContext` to the
-      # block; the block's return value becomes the `tool.result.value`.
-      #
-      # @param parent_task [Async::Task]
-      # @param job_id [Arcp::JobId]
-      # @param extras [Hash] additional fields (e.g. stream_manager) to
-      #   attach to the JobContext
-      # @yieldparam ctx [Arcp::Runtime::JobContext]
-      # @return [Async::Task]
-      def start(parent_task, job_id, extras: {}, &)
-        record = lookup!(job_id)
-        record.transition!(JobState::RUNNING)
-        @emit.call(record, Messages::Execution::JobStarted.new(detail: nil))
-
-        task = parent_task.async do |child|
-          ctx = JobContext.new(record: record, manager: self, task: child, extras: extras)
-          execute_job(ctx, record, &)
+      def register_agent(name:, versions:, default:, handler:)
+        @mutex.synchronize do
+          @agents[name] = AgentRegistration.new(
+            name: name, versions: Array(versions).freeze,
+            default: default, handler: handler
+          )
         end
-        @mutex.synchronize { @tasks[job_id.value] = task }
-        task
       end
 
-      # Emit a heartbeat for the job.
-      def heartbeat(job_id)
-        record = lookup!(job_id)
-        record.record_heartbeat!
-        seq = record.next_sequence!
-        @emit.call(record, Messages::Execution::JobHeartbeat.new(
-                             sequence: seq,
-                             deadline_ms: @heartbeat_interval_seconds * 2 * 1000,
-                             state: record.state.to_s
-                           ))
+      def agent_inventory
+        @mutex.synchronize do
+          Arcp::Session::AgentInventory.new(
+            entries: @agents.values.map do |reg|
+              Arcp::Session::AgentEntry.new(name: reg.name, versions: reg.versions, default: reg.default)
+            end.freeze
+          )
+        end
       end
 
-      # Emit progress.
-      def progress(job_id, percent: nil, message: nil, detail: nil)
-        record = lookup!(job_id)
-        @emit.call(record, Messages::Execution::JobProgress.new(
-                             percent: percent, message: message, detail: detail
-                           ))
+      def resolve_agent(ref_str)
+        ref = Arcp::Job::AgentRef.parse(ref_str)
+        reg = @mutex.synchronize { @agents[ref.name] }
+        raise Arcp::Errors::AgentNotAvailable, "agent not registered: #{ref.name}" if reg.nil?
+
+        version = ref.version || reg.default
+        if version.nil? || (!reg.versions.empty? && !reg.versions.include?(version))
+          raise Arcp::Errors::AgentVersionNotAvailable.new(
+            "agent #{ref.name} has no version #{version.inspect}",
+            details: { 'agent' => ref.name, 'version' => version, 'available' => reg.versions }
+          )
+        end
+
+        [reg, "#{ref.name}@#{version}"]
       end
 
-      # Cancel a job cooperatively. The job's task is given `deadline_ms`
-      # to exit on its own; otherwise it is force-stopped.
-      #
-      # @param job_id [Arcp::JobId]
-      # @param reason [String]
-      # @param deadline_ms [Numeric]
-      def cancel!(job_id, reason: nil, deadline_ms: 5_000)
-        record = lookup(job_id)
-        return false if record.nil? || record.terminal?
+      def submit(submit:, principal_id:, session_id:, session_actor:)
+        reg, resolved = resolve_agent(submit.agent)
 
-        record.request_cancellation!(deadline_ms / 1000.0)
-        @emit.call(record, Messages::Control::CancelAccepted.new(target: 'job', target_id: job_id.value))
-        task = @mutex.synchronize { @tasks[job_id.value] }
-        # Stop the task; `Async::Stop` is raised inside it, which the
-        # `execute_job` rescue clause turns into `:cancelled`. The
-        # deadline applies to cooperative cleanup before the stop, but
-        # for v0.1 we drive it via task.stop directly.
-        @cancel_reason = reason
-        task&.stop
-        true
+        if submit.idempotency_key
+          key = [principal_id, submit.idempotency_key]
+          if (existing = @mutex.synchronize { @idempotency[key] })
+            existing_record = @mutex.synchronize { @jobs[existing] }
+            if existing_record && existing_record.agent != resolved
+              raise Arcp::Errors::DuplicateKey.new(
+                'idempotency key reused with different agent',
+                details: { 'job_id' => existing }
+              )
+            end
+            return existing
+          end
+        end
+
+        job_id = Arcp::Ids.job_id
+
+        lease = build_lease(submit, job_id)
+        @leases.register(job_id, lease) if lease
+
+        record = JobRecord.new(
+          job_id: job_id, agent: resolved, principal_id: principal_id,
+          status: 'pending', created_at: @clock.now.iso8601,
+          input: submit.input, submitter_session_id: session_id, task: nil
+        )
+        @mutex.synchronize do
+          @jobs[job_id] = record
+          @idempotency[[principal_id, submit.idempotency_key]] = job_id if submit.idempotency_key
+        end
+
+        @subs.register_owner(job_id, principal_id, session_id, session_actor.outbox)
+
+        task = Async do |t|
+          run_agent(t, reg, job_id, submit, lease)
+        end
+        @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(task: task, status: 'running') }
+
+        [job_id, resolved, lease]
       end
 
-      # Mark a job blocked (e.g. on human input or interrupt).
-      def block(job_id)
-        record = lookup!(job_id)
-        record.transition!(JobState::BLOCKED) unless record.state == JobState::BLOCKED
+      def cancel(job_id:, principal_id:, reason: nil)
+        record = @mutex.synchronize { @jobs[job_id] }
+        raise Arcp::Errors::JobNotFound, "no such job: #{job_id}" unless record
+
+        unless record.principal_id == principal_id
+          raise Arcp::Errors::PermissionDenied.new(
+            'only the submitting principal can cancel a job',
+            details: { 'job_id' => job_id }
+          )
+        end
+
+        record.task&.stop
+        publish_error(job_id, Arcp::Job::JobError.new(
+                                job_id: job_id, final_status: 'cancelled',
+                                code: 'CANCELLED', message: reason, retryable: false, details: {}
+                              ))
       end
 
-      # Mark a blocked job runnable again.
-      def unblock(job_id)
-        record = lookup!(job_id)
-        record.transition!(JobState::RUNNING) if record.state == JobState::BLOCKED
+      def list(principal_id:, filter: {}, limit: 50, cursor: nil)
+        offset = cursor ? cursor.to_i : 0
+        rows = @mutex.synchronize do
+          @jobs.values
+               .select { |r| r.principal_id == principal_id }
+               .select { |r| filter['status'].nil? || filter['status'].include?(r.status) }
+               .select { |r| filter['agent'].nil? || r.agent.start_with?(filter['agent']) }
+               .sort_by(&:created_at)
+        end
+
+        page = rows[offset, limit] || []
+        next_cursor = ((offset + page.size) < rows.size) ? (offset + page.size).to_s : nil
+
+        summaries = page.map do |r|
+          lease = @leases.get(r.job_id)
+          counter = @leases.counter(r.job_id)
+          Arcp::Job::Summary.new(
+            job_id: r.job_id, agent: r.agent, status: r.status, created_at: r.created_at,
+            lease_expires_at: lease&.expires_at,
+            budget_remaining: counter ? counter.snapshot.transform_values { |v| v.to_s('F') } : nil
+          )
+        end
+
+        Arcp::Session::JobsResponse.new(
+          jobs: summaries.map(&:to_h), next_cursor: next_cursor
+        )
       end
 
-      # Complete a job with a value.
-      def complete(job_id, value: nil, result_ref: nil)
-        record = lookup!(job_id)
-        return if record.terminal?
+      def lookup(job_id) = @mutex.synchronize { @jobs[job_id] }
 
-        record.transition!(JobState::COMPLETED)
-        @emit.call(record, Messages::Execution::JobCompleted.new(value: value, result_ref: result_ref))
+      def publish_event(job_id, event)
+        seq = @mutex.synchronize { @event_seq[job_id] += 1 }
+        env = Arcp::Envelope.build(
+          type: Arcp::MessageTypes::JOB_EVENT,
+          session_id: @mutex.synchronize { @jobs[job_id]&.submitter_session_id || '' },
+          job_id: job_id, event_seq: seq, payload: event.to_h
+        )
+        @event_log.append(env.session_id, env)
+        @subs.fanout(job_id, env)
+        seq
       end
 
-      # Fail a job with a structured error.
-      def fail_job(job_id, code:, message:, retryable: false, details: nil)
-        record = lookup!(job_id)
-        return if record.terminal?
-
-        record.transition!(JobState::FAILED)
-        @emit.call(record, Messages::Execution::JobFailed.new(
-                             code: code, message: message, retryable: retryable, details: details
-                           ))
+      def publish_result(job_id, result)
+        record = @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(status: 'succeeded') if @jobs[job_id]; @jobs[job_id] }
+        env = Arcp::Envelope.build(
+          type: Arcp::MessageTypes::JOB_RESULT,
+          session_id: record&.submitter_session_id || '',
+          job_id: job_id, payload: result.to_h
+        )
+        @event_log.append(env.session_id, env)
+        @subs.fanout(job_id, env)
+        @subs.clear(job_id)
+        @leases.revoke(job_id)
       end
 
-      # Cancel terminal — used internally after cooperative cancel.
-      def finalize_cancellation(job_id, reason:)
-        record = lookup!(job_id)
-        return if record.terminal?
-
-        record.transition!(JobState::CANCELLED)
-        @emit.call(record, Messages::Execution::JobCancelled.new(reason: reason, code: ErrorCode::CANCELLED))
-      end
-
-      # @api private
-      def lookup(job_id)
-        key = job_id.respond_to?(:value) ? job_id.value : job_id
-        @mutex.synchronize { @records[key] }
-      end
-
-      # @api private
-      def lookup!(job_id)
-        record = lookup(job_id)
-        raise Arcp::Error::NotFound, "job not found: #{job_id}" if record.nil?
-
-        record
+      def publish_error(job_id, error)
+        record = @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(status: error.final_status) if @jobs[job_id]; @jobs[job_id] }
+        env = Arcp::Envelope.build(
+          type: Arcp::MessageTypes::JOB_ERROR,
+          session_id: record&.submitter_session_id || '',
+          job_id: job_id, payload: error.to_h
+        )
+        @event_log.append(env.session_id, env)
+        @subs.fanout(job_id, env)
+        @subs.clear(job_id)
+        @leases.revoke(job_id)
       end
 
       private
 
-      def execute_job(ctx, record)
-        value = yield(ctx)
-        complete(record.job_id, value: value)
-      rescue Async::Stop
-        finalize_cancellation(record.job_id, reason: @cancel_reason || 'stopped')
+      def build_lease(submit, job_id)
+        return nil unless submit.lease_request
+
+        Arcp::Lease::Lease.new(
+          id: "lse_#{job_id}",
+          capabilities: submit.lease_request.capabilities,
+          budget: submit.lease_request.budget,
+          expires_at: submit.lease_constraints&.expires_at || submit.lease_request.expires_at,
+          issued_at: @clock.now.iso8601
+        )
+      end
+
+      def run_agent(task, reg, job_id, submit, lease)
+        ctx = JobContext.new(
+          job_id: job_id, agent: reg.name, input: submit.input,
+          lease: lease, sink: self
+        )
+        if submit.max_runtime_sec
+          deadline = task.async do
+            task.sleep(submit.max_runtime_sec)
+            ctx.fail!(code: 'TIMEOUT', message: 'max_runtime_sec elapsed', retryable: true)
+            task.stop
+          end
+        end
+
+        reg.handler.call(ctx)
+        ctx.finish unless ctx.instance_variable_get(:@done)
       rescue Arcp::Error => e
-        fail_job(record.job_id, code: e.code, message: e.message, retryable: e.retryable?, details: e.details)
+        ctx&.fail!(code: e.code, message: e.message, retryable: e.retryable?, details: e.details || {})
+      rescue Async::Stop
+        nil
       rescue StandardError => e
-        fail_job(record.job_id, code: ErrorCode::INTERNAL, message: e.message)
-      end
-    end
-
-    # Per-job context handed to the worker block.
-    class JobContext
-      attr_reader :record, :task, :extras
-
-      def initialize(record:, manager:, task:, extras: {})
-        @record = record
-        @manager = manager
-        @task = task
-        @extras = extras
-      end
-
-      def job_id         = @record.job_id
-      def session_id     = @record.session_id
-      def progress(**kw) = @manager.progress(@record.job_id, **kw)
-      def heartbeat      = @manager.heartbeat(@record.job_id)
-
-      # @return [Arcp::Runtime::StreamManager, nil]
-      def streams = @extras[:streams]
-
-      # @return [Arcp::Runtime::PendingRegistry, nil]
-      def pending = @extras[:pending]
-
-      # @return [Arcp::Runtime::SessionHelper, nil]
-      def helper = @extras[:helper]
-
-      # @return [Arcp::Runtime::LeaseManager, nil]
-      def leases = @extras[:leases]
-
-      # Convenience: ask the human via the session helper.
-      def request_human_input(**kw)
-        helper.request_human_input(job_id: job_id, **kw)
-      end
-
-      def request_permission(**kw)
-        helper.request_permission(job_id: job_id, **kw)
+        ctx&.fail!(code: 'INTERNAL_ERROR', message: e.message, retryable: true,
+                   details: { 'class' => e.class.name })
       end
     end
   end

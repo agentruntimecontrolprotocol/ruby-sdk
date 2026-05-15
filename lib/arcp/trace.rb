@@ -1,48 +1,53 @@
 # frozen_string_literal: true
 
-require 'arcp/ids'
+require_relative 'ids'
 
 module Arcp
-  # Fiber-local trace context (§17.1).
-  #
-  # The current `TraceContext` is read from `Fiber[:arcp_trace]` and
-  # propagates across fiber suspension/resume boundaries automatically.
-  module Tracing
-    KEY = :arcp_trace
-    private_constant :KEY
+  module Trace
+    KEY = :arcp_trace_context
 
-    # Immutable per-trace context.
-    Context = Data.define(:trace_id, :span_id, :parent_span_id) do
-      def child(new_span: SpanId.random)
-        Context.new(trace_id: trace_id, span_id: new_span, parent_span_id: span_id)
-      end
+    Context = Data.define(:trace_id, :span_id, :attributes)
+
+    module_function
+
+    def current
+      Fiber[KEY] || Context.new(trace_id: nil, span_id: nil, attributes: {}.freeze)
     end
 
-    # Set the current context for the duration of the block.
-    #
-    # @param context [Arcp::Tracing::Context]
-    # @yield
-    def self.with(context)
-      previous = Fiber[KEY]
-      Fiber[KEY] = context
-      yield
-    ensure
-      Fiber[KEY] = previous
+    def current=(ctx)
+      Fiber[KEY] = ctx
     end
 
-    # @return [Arcp::Tracing::Context, nil]
-    def self.current
-      Fiber[KEY]
-    end
-
-    # @param trace_id [Arcp::TraceId, nil]
-    # @return [Arcp::Tracing::Context]
-    def self.start(trace_id: nil)
-      Context.new(
-        trace_id: trace_id || TraceId.random,
-        span_id: SpanId.random,
-        parent_span_id: nil
+    def with(trace_id: nil, span_id: nil, attributes: {})
+      prev = current
+      Fiber[KEY] = Context.new(
+        trace_id: trace_id || prev.trace_id || Arcp::Ids.trace_id,
+        span_id: span_id || Arcp::Ids.span_id,
+        attributes: prev.attributes.merge(attributes).freeze
       )
+      yield current
+    ensure
+      Fiber[KEY] = prev
+    end
+
+    # @return [String] new 32-hex trace id.
+    def new_trace_id = Arcp::Ids.trace_id
+
+    def in_span(name, attributes: {})
+      tracer = begin
+        require 'opentelemetry'
+        OpenTelemetry.tracer_provider.tracer('arcp')
+      rescue LoadError
+        nil
+      end
+
+      if tracer
+        tracer.in_span(name, attributes: attributes) do |span|
+          yield span
+        end
+      else
+        with(attributes: attributes) { |ctx| yield ctx }
+      end
     end
   end
 end

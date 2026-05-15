@@ -1,0 +1,18 @@
+module Arcp
+  module Transport
+    class Base
+      def send: (Arcp::Envelope) -> void
+      def receive: () -> Arcp::Envelope?
+      def close: (?reason: String?) -> void
+      def closed?: () -> bool
+    end
+
+    class MemoryTransport < Base
+      attr_reader sent: Array[Arcp::Envelope]
+      def self.pair: () -> [MemoryTransport, MemoryTransport]
+    end
+
+    class StdioTransport < Base end
+    class WebSocketTransport < Base end
+  end
+end

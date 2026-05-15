@@ -1,0 +1,16 @@
+module Arcp
+  class Client
+    attr_reader session: Arcp::Session::Info
+    attr_reader transport: Arcp::Transport::Base
+
+    def self.open: (transport: Arcp::Transport::Base, auth: Hash[String, untyped], ?client_name: String, ?client_version: String, ?capabilities: Arcp::Session::CapabilitySet?, ?resume: Hash[String, untyped]?, ?clock: untyped) -> Client
+
+    def list_jobs: (?status: untyped, ?agent: String?, ?created_after: String?, ?limit: Integer?, ?cursor: String?) -> Enumerator::Lazy[Arcp::Job::Summary, untyped]
+    def submit_job: (agent: String, ?input: untyped, ?lease_request: Arcp::Lease::LeaseRequest?, ?lease_constraints: Arcp::Lease::LeaseConstraints?, ?idempotency_key: String?, ?max_runtime_sec: Integer?) -> Arcp::Job::Handle
+    def subscribe_job: (job_id: String, ?from_event_seq: Integer?, ?history: bool) -> Enumerator[Arcp::Job::Event, void]
+    def cancel_job: (job_id: String, ?reason: String?) -> Arcp::Envelope
+    def get_result: (job_id: String) -> Arcp::Job::Result
+    def ack: (Integer) -> void
+    def close: (?reason: String?) -> void
+  end
+end

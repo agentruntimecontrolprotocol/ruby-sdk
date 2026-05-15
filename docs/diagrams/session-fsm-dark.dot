@@ -1,0 +1,78 @@
+// ============================================================================
+//  Arcp::Session client-side FSM (DARK variant)
+// ============================================================================
+
+digraph SessionFSM {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.32;
+  ranksep=0.55;
+  pad="0.35,0.25";
+  labelloc=b;
+  label=<<FONT POINT-SIZE="10" COLOR="#94A3B8">Arcp::Session client-side FSM — spec §6.2 §6.4 §6.7</FONT>>;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#334155",
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#F1F5F9",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#94A3B8",
+    color="#64748B",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  init [
+    label=<<FONT POINT-SIZE="12"><B>init</B></FONT>>,
+    fillcolor="#3B82F6", color="#2563EB",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  hello_sent [label="hello_sent"];
+  welcome_received [label="welcome_received"];
+
+  live [
+    label=<<FONT POINT-SIZE="12"><B>live</B></FONT>>,
+    fillcolor="#F59E0B", color="#D97706",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  pinging [label="pinging"];
+
+  closed [
+    label="closed",
+    shape=doublecircle, fillcolor="#dcfce7", fontcolor="#1F2937"
+  ];
+
+  error [
+    label="error",
+    shape=doublecircle, fillcolor="#fee2e2", fontcolor="#1F2937"
+  ];
+
+  edge [color="#94A3B8", penwidth=1.2];
+  init -> hello_sent [label="send session.hello"];
+  hello_sent -> welcome_received [label="recv session.welcome"];
+  welcome_received -> live [label="freeze effective caps"];
+  live -> pinging [label="send session.ping (idle interval)"];
+  pinging -> live [label="recv session.pong"];
+  live -> closed [label="send session.bye"];
+
+  edge [color="#475569", penwidth=1.0];
+  hello_sent -> error [label="handshake reject"];
+  pinging -> error [label="2× idle → HEARTBEAT_LOST"];
+  live -> error [label="transport drop"];
+}

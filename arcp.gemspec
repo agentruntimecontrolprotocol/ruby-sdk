@@ -4,20 +4,21 @@ require_relative 'lib/arcp/version'
 
 Gem::Specification.new do |spec|
   spec.name        = 'arcp'
-  spec.version     = Arcp::IMPL_VERSION
+  spec.version     = Arcp::VERSION
   spec.authors     = ['ARCP Authors']
   spec.email       = ['arcp-authors@users.noreply.github.com']
 
   spec.summary     = 'Reference Ruby implementation of the Agent Runtime Control Protocol (ARCP).'
   spec.description = <<~DESC
-    A reference Ruby implementation of ARCP v#{Arcp::PROTOCOL_VERSION}: an envelope and
-    message model, a fiber-based runtime, a client, WebSocket and stdio transports,
-    a SQLite-backed event log, and a CLI. Built on the async gem.
+    Ruby SDK for ARCP: envelope and message model, fiber-based runtime, client,
+    WebSocket / stdio / in-memory transports, SQLite-backed resume log,
+    capability negotiation, leases with budget and expiration, streamed results,
+    and OpenTelemetry trace propagation. Built on socketry/async.
   DESC
   spec.homepage    = 'https://github.com/nficano/arpc'
   spec.license     = 'Apache-2.0'
 
-  spec.required_ruby_version = '>= 3.4.0'
+  spec.required_ruby_version = '>= 3.3.0'
 
   spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/ruby-sdk/CHANGELOG.md"
   spec.metadata['source_code_uri']       = 'https://github.com/nficano/arpc.git'
@@ -28,23 +29,18 @@ Gem::Specification.new do |spec|
     'lib/**/*.rb',
     'lib/**/*.sql',
     'sig/**/*.rbs',
-    'exe/*',
     'README.md',
     'CONFORMANCE.md',
-    'RFC-0001-v2.md',
-    'PLAN.md',
     'CHANGELOG.md',
     'LICENSE'
   ]
   spec.require_paths = ['lib']
-  spec.bindir        = 'exe'
-  spec.executables   = ['arcp']
 
-  spec.add_dependency 'async', '~> 2.0'
+  spec.add_dependency 'async', '~> 2.20'
+  spec.add_dependency 'async-http', '~> 0.86'
   spec.add_dependency 'async-websocket', '~> 0.30'
-  spec.add_dependency 'dry-cli', '~> 1.0'
-  spec.add_dependency 'json_schemer', '~> 2.0'
-  spec.add_dependency 'jwt', '~> 2.0'
+  spec.add_dependency 'bigdecimal', '~> 3.1'
   spec.add_dependency 'logger', '~> 1.6'
+  spec.add_dependency 'opentelemetry-api', '~> 1.5'
   spec.add_dependency 'sqlite3', '~> 2.0'
 end
