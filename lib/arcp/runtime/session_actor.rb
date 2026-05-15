@@ -28,16 +28,15 @@ module Arcp
 
       def run
         Async do |task|
-          begin
-            envelope = @transport.receive
-            return if envelope.nil?
-            handshake(envelope)
-            spawn_writer(task)
-            spawn_heartbeat(task)
-            loop_inbound(task)
-          ensure
-            close_session
-          end
+          envelope = @transport.receive
+          return if envelope.nil?
+
+          handshake(envelope)
+          spawn_writer(task)
+          spawn_heartbeat(task)
+          loop_inbound(task)
+        ensure
+          close_session
         end
       end
 
@@ -131,7 +130,7 @@ module Arcp
         end
       end
 
-      def loop_inbound(parent)
+      def loop_inbound(_parent)
         loop do
           env = @transport.receive
           break if env.nil?
@@ -257,7 +256,7 @@ module Arcp
       end
 
       def reply_error(env, error)
-        if env && env.job_id
+        if env&.job_id
           job_err = Arcp::Job::JobError.new(
             job_id: env.job_id, final_status: 'error',
             code: error.code, message: error.message,

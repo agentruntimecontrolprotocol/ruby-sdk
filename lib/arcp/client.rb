@@ -95,7 +95,9 @@ module Arcp
       end
 
       start_reader!
-      start_heartbeat! if @session.supports?(Arcp::Session::Feature::HEARTBEAT) && @session.heartbeat_interval_sec
+      if @session.supports?(Arcp::Session::Feature::HEARTBEAT) && @session.heartbeat_interval_sec
+        start_heartbeat!
+      end
       @session
     end
 
@@ -250,7 +252,7 @@ module Arcp
     end
 
     def start_reader!
-      @reader_task = Async do |task|
+      @reader_task = Async do |_task|
         loop do
           env = @transport.receive
           break if env.nil?
@@ -296,7 +298,8 @@ module Arcp
       when Arcp::MessageTypes::SESSION_PING
         ping = Arcp::Session::Ping.from_h(env.payload)
         send_envelope(type: Arcp::MessageTypes::SESSION_PONG,
-                      payload: Arcp::Session::Pong.new(ping_nonce: ping.nonce, received_at: @clock.now.iso8601).to_h)
+                      payload: Arcp::Session::Pong.new(ping_nonce: ping.nonce,
+                                                       received_at: @clock.now.iso8601).to_h)
       when Arcp::MessageTypes::SESSION_PONG
         # noop — receipt of any inbound resets timer (implicit)
       else
@@ -307,9 +310,7 @@ module Arcp
     def feed_job_stream(env, end_stream: false)
       queue = @mutex.synchronize { @job_streams[env.job_id] ||= Async::Queue.new }
 
-      if env.type == Arcp::MessageTypes::JOB_EVENT
-        queue.enqueue(Arcp::Job::Event.from_h(env.payload))
-      end
+      queue.enqueue(Arcp::Job::Event.from_h(env.payload)) if env.type == Arcp::MessageTypes::JOB_EVENT
 
       queue.enqueue(:__arcp_end__) if end_stream
     end
@@ -324,7 +325,11 @@ module Arcp
 
     def feed_pending(env)
       reply_to = env.payload.is_a?(Hash) ? env.payload['reply_to'] : nil
-      key = reply_to || @mutex.synchronize { @pending.keys.find { |k| @pending[k].is_a?(Array) && @pending[k][0] == env.type } }
+      key = reply_to || @mutex.synchronize do
+        @pending.keys.find do |k|
+          @pending[k].is_a?(Array) && @pending[k][0] == env.type
+        end
+      end
       return unless key
 
       pair = @mutex.synchronize { @pending.delete(key) }

@@ -35,7 +35,10 @@ module Arcp
         h = {}
         Array(entries).each do |entry|
           ccy, amount = entry.to_s.split(':', 2)
-          raise Arcp::Errors::InvalidRequest, "malformed budget entry: #{entry.inspect}" if ccy.nil? || amount.nil?
+          if ccy.nil? || amount.nil?
+            raise Arcp::Errors::InvalidRequest,
+                  "malformed budget entry: #{entry.inspect}"
+          end
 
           h[ccy] = BigDecimal(amount)
         end
@@ -69,7 +72,7 @@ module Arcp
       def negative?(currency) = (@remaining[currency] || BigDecimal('0')).negative?
 
       def snapshot
-        @remaining.transform_values { |v| v.dup }.freeze
+        @remaining.transform_values(&:dup).freeze
       end
     end
 

@@ -7,7 +7,7 @@ module Arcp
         return nil if ref.nil?
 
         name, version = ref.to_s.split('@', 2)
-        raise Arcp::Errors::InvalidRequest, "agent name must be non-empty" if name.nil? || name.empty?
+        raise Arcp::Errors::InvalidRequest, 'agent name must be non-empty' if name.nil? || name.empty?
 
         new(name: name, version: version)
       end

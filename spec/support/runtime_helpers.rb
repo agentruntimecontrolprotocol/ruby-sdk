@@ -23,8 +23,8 @@ module RuntimeHelpers
 end
 
 module SyncExample
-  def run_sync(&block)
-    Sync(&block)
+  def run_sync(&)
+    Sync(&)
   end
 end
 

@@ -6,7 +6,7 @@ RSpec.describe 'result_chunk streaming', type: :integration do
   it 'streams chunks and terminates with job.result carrying result_id' do
     Sync do
       runtime = build_runtime(agents: {
-                                streamer: ->(ctx) {
+                                streamer: lambda { |ctx|
                                   ctx.stream_result(encoding: 'utf8') do |writer|
                                     writer.write('hello ', more: true)
                                     writer.write('world', more: false)

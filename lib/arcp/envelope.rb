@@ -16,7 +16,7 @@ module Arcp
     HEX32 = /\A[0-9a-f]{32}\z/
 
     def self.build(type:, session_id:, payload:, trace_id: nil, job_id: nil, event_seq: nil, id: nil)
-      raise Arcp::Errors::InvalidRequest, "trace_id must be 32 hex chars" if trace_id && trace_id !~ HEX32
+      raise Arcp::Errors::InvalidRequest, 'trace_id must be 32 hex chars' if trace_id && trace_id !~ HEX32
 
       new(
         arcp: Arcp::PROTOCOL_VERSION,
@@ -35,16 +35,24 @@ module Arcp
 
       h = hash.transform_keys(&:to_s)
       arcp = h['arcp']
-      raise Arcp::Errors::InvalidRequest, "unsupported arcp version: #{arcp.inspect}" unless arcp == Arcp::PROTOCOL_VERSION
+      unless arcp == Arcp::PROTOCOL_VERSION
+        raise Arcp::Errors::InvalidRequest, "unsupported arcp version: #{arcp.inspect}"
+      end
 
       type = h['type']
       raise Arcp::Errors::InvalidRequest, 'envelope type must be a String' unless type.is_a?(String)
 
       session_id = h['session_id']
-      raise Arcp::Errors::InvalidRequest, 'envelope session_id must be a String' unless session_id.is_a?(String)
+      unless session_id.is_a?(String)
+        raise Arcp::Errors::InvalidRequest,
+              'envelope session_id must be a String'
+      end
 
       event_seq = h['event_seq']
-      raise Arcp::Errors::InvalidRequest, 'event_seq must be an Integer' unless event_seq.nil? || event_seq.is_a?(Integer)
+      unless event_seq.nil? || event_seq.is_a?(Integer)
+        raise Arcp::Errors::InvalidRequest,
+              'event_seq must be an Integer'
+      end
 
       trace_id = h['trace_id']
       raise Arcp::Errors::InvalidRequest, 'trace_id must be 32 hex chars' if trace_id && trace_id !~ HEX32
@@ -72,17 +80,15 @@ module Arcp
       case value
       when Hash
         value.each_value { |v| deep_freeze(v) }
-        value.freeze
       when Array
         value.each { |v| deep_freeze(v) }
-        value.freeze
-      else
-        value.freeze
       end
+      value.freeze
     end
 
     def to_h
-      h = { 'arcp' => arcp, 'id' => id, 'type' => type, 'session_id' => session_id, 'payload' => stringify(payload) }
+      h = { 'arcp' => arcp, 'id' => id, 'type' => type, 'session_id' => session_id,
+            'payload' => stringify(payload) }
       h['trace_id']  = trace_id  if trace_id
       h['job_id']    = job_id    if job_id
       h['event_seq'] = event_seq if event_seq

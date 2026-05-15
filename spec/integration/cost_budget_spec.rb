@@ -8,7 +8,7 @@ RSpec.describe 'cost.budget enforcement', type: :integration do
     Sync do
       lease_manager_ref = nil
       runtime = build_runtime(
-        agents: { spender: ->(ctx) {
+        agents: { spender: lambda { |ctx|
           # Spend three times against a $1.00 budget; third call should raise.
           3.times { lease_manager_ref.try_spend!(ctx.job_id, 'USD', BigDecimal('0.40')) }
           ctx.finish(result: 'ok')

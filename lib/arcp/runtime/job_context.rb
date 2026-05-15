@@ -39,7 +39,8 @@ module Arcp
 
       def progress(current:, total: nil, units: nil, message: nil)
         emit(kind: Arcp::Job::EventKind::PROGRESS,
-             body: Arcp::Job::EventBody::Progress.new(current: current, total: total, units: units, message: message))
+             body: Arcp::Job::EventBody::Progress.new(current: current, total: total, units: units,
+                                                      message: message))
       end
 
       def metric(name:, value:, unit: nil)
@@ -67,8 +68,6 @@ module Arcp
 
         @chunked = true
         @result_id = Arcp::Ids.result_id
-        seq = 0
-        size = 0
 
         writer = ChunkWriter.new(ctx: self, encoding: encoding, result_id: @result_id)
         if block
@@ -117,8 +116,6 @@ module Arcp
 
       # @api private
       class ChunkWriter
-        attr_reader :totals
-
         def initialize(ctx:, encoding:, result_id:)
           @ctx = ctx
           @encoding = encoding

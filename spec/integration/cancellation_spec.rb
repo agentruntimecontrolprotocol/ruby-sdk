@@ -6,7 +6,7 @@ RSpec.describe 'job cancellation', type: :integration do
   it 'cancels a running job and yields final_status: cancelled' do
     Sync do
       runtime = build_runtime(agents: {
-                                sleepy: ->(ctx) {
+                                sleepy: lambda { |ctx|
                                   ctx.progress(current: 0, total: 10)
                                   Async::Task.current.sleep(5)
                                   ctx.finish

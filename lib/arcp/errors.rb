@@ -118,7 +118,7 @@ module Arcp
 
     WIRE_CODES = ALL.map { |c| c::CODE }.freeze
 
-    BY_CODE = ALL.each_with_object({}) { |klass, h| h[klass::CODE] = klass }.freeze
+    BY_CODE = ALL.to_h { |klass| [klass::CODE, klass] }.freeze
 
     RETRYABLE_BY_DEFAULT = ALL.select { |k| k.new.retryable? }.map { |k| k::CODE }.freeze
     NON_RETRYABLE_BY_DEFAULT = (WIRE_CODES - RETRYABLE_BY_DEFAULT).freeze

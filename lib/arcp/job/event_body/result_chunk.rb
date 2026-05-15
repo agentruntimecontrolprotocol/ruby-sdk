@@ -11,7 +11,10 @@ module Arcp
         def self.from_h(h)
           h = h.transform_keys(&:to_s)
           encoding = h.fetch('encoding')
-          raise Arcp::Errors::InvalidRequest, "unknown encoding: #{encoding.inspect}" unless ENCODINGS.include?(encoding)
+          unless ENCODINGS.include?(encoding)
+            raise Arcp::Errors::InvalidRequest,
+                  "unknown encoding: #{encoding.inspect}"
+          end
 
           new(
             result_id: h.fetch('result_id'),

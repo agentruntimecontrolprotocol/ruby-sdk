@@ -21,10 +21,10 @@ module Arcp
 
       def to_h
         h = {
-          'client_name'    => client_name,
+          'client_name' => client_name,
           'client_version' => client_version,
-          'auth'           => auth,
-          'capabilities'   => capabilities.to_h.reject { |k, _| k == 'agents' }
+          'auth' => auth,
+          'capabilities' => capabilities.to_h.except('agents')
         }
         h['resume'] = resume if resume
         h

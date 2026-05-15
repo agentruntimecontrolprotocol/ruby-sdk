@@ -12,7 +12,7 @@ RSpec.describe 'session.list_jobs', type: :integration do
       alice_client, alice_task = open_pair(runtime, auth: { 'token' => 'alice-tok' })
       bob_client, bob_task = open_pair(runtime, auth: { 'token' => 'bob-tok' })
 
-      5.times.map { alice_client.submit_job(agent: 'echo') }.each do |h|
+      Array.new(5) { alice_client.submit_job(agent: 'echo') }.each do |h|
         h.subscribe(client: alice_client).to_a
         h.get_result(client: alice_client)
       end

@@ -35,16 +35,16 @@ module Arcp
     end
 
     BODY_CLASSES = {
-      EventKind::PROGRESS     => EventBody::Progress,
+      EventKind::PROGRESS => EventBody::Progress,
       EventKind::RESULT_CHUNK => EventBody::ResultChunk,
-      EventKind::LOG          => EventBody::Log,
-      EventKind::THOUGHT      => EventBody::Thought,
-      EventKind::TOOL_CALL    => EventBody::ToolCall,
-      EventKind::TOOL_RESULT  => EventBody::ToolResult,
-      EventKind::STATUS       => EventBody::Status,
-      EventKind::METRIC       => EventBody::Metric,
-      EventKind::TRACE_SPAN   => EventBody::TraceSpan,
-      EventKind::DELEGATE     => EventBody::Delegate
+      EventKind::LOG => EventBody::Log,
+      EventKind::THOUGHT => EventBody::Thought,
+      EventKind::TOOL_CALL => EventBody::ToolCall,
+      EventKind::TOOL_RESULT => EventBody::ToolResult,
+      EventKind::STATUS => EventBody::Status,
+      EventKind::METRIC => EventBody::Metric,
+      EventKind::TRACE_SPAN => EventBody::TraceSpan,
+      EventKind::DELEGATE => EventBody::Delegate
     }.freeze
 
     Event = Data.define(:kind, :body) do

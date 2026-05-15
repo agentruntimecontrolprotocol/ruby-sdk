@@ -6,7 +6,7 @@ RSpec.describe 'job lifecycle', type: :integration do
   it 'submits, streams events, and returns a result' do
     Sync do
       runtime = build_runtime(agents: {
-                                echo: ->(ctx) {
+                                echo: lambda { |ctx|
                                   ctx.log(level: 'info', message: 'starting')
                                   ctx.progress(current: 1, total: 1)
                                   ctx.finish(result: { 'echo' => ctx.input })
@@ -32,7 +32,7 @@ RSpec.describe 'job lifecycle', type: :integration do
   it 'surfaces agent errors as JobError exceptions' do
     Sync do
       runtime = build_runtime(agents: {
-                                bomb: ->(ctx) {
+                                bomb: lambda { |ctx|
                                   ctx.fail!(code: 'PERMISSION_DENIED', message: 'nope', retryable: false)
                                 }
                               })

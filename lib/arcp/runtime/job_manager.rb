@@ -10,7 +10,7 @@ module Arcp
 
     JobRecord = Data.define(:job_id, :agent, :principal_id, :status, :created_at,
                             :input, :submitter_session_id, :task) do
-      def with(**kw) = self.class.new(**to_h.merge(kw))
+      def with(**kw) = self.class.new(**to_h, **kw)
     end
 
     # Owns agent registry + per-job lifecycle. Submitted jobs run as
@@ -135,7 +135,7 @@ module Arcp
         end
 
         page = rows[offset, limit] || []
-        next_cursor = ((offset + page.size) < rows.size) ? (offset + page.size).to_s : nil
+        next_cursor = (offset + page.size) < rows.size ? (offset + page.size).to_s : nil
 
         summaries = page.map do |r|
           lease = @leases.get(r.job_id)
@@ -167,7 +167,10 @@ module Arcp
       end
 
       def publish_result(job_id, result)
-        record = @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(status: 'succeeded') if @jobs[job_id]; @jobs[job_id] }
+        record = @mutex.synchronize do
+          @jobs[job_id] = @jobs[job_id].with(status: 'succeeded') if @jobs[job_id]
+          @jobs[job_id]
+        end
         env = Arcp::Envelope.build(
           type: Arcp::MessageTypes::JOB_RESULT,
           session_id: record&.submitter_session_id || '',
@@ -180,7 +183,10 @@ module Arcp
       end
 
       def publish_error(job_id, error)
-        record = @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(status: error.final_status) if @jobs[job_id]; @jobs[job_id] }
+        record = @mutex.synchronize do
+          @jobs[job_id] = @jobs[job_id].with(status: error.final_status) if @jobs[job_id]
+          @jobs[job_id]
+        end
         env = Arcp::Envelope.build(
           type: Arcp::MessageTypes::JOB_ERROR,
           session_id: record&.submitter_session_id || '',
@@ -212,7 +218,7 @@ module Arcp
           lease: lease, sink: self
         )
         if submit.max_runtime_sec
-          deadline = task.async do
+          task.async do
             task.sleep(submit.max_runtime_sec)
             ctx.fail!(code: 'TIMEOUT', message: 'max_runtime_sec elapsed', retryable: true)
             task.stop

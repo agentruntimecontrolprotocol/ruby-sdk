@@ -33,7 +33,7 @@ module Arcp
     # @return [String] new 32-hex trace id.
     def new_trace_id = Arcp::Ids.trace_id
 
-    def in_span(name, attributes: {})
+    def in_span(name, attributes: {}, &)
       tracer = begin
         require 'opentelemetry'
         OpenTelemetry.tracer_provider.tracer('arcp')
@@ -42,11 +42,9 @@ module Arcp
       end
 
       if tracer
-        tracer.in_span(name, attributes: attributes) do |span|
-          yield span
-        end
+        tracer.in_span(name, attributes: attributes, &)
       else
-        with(attributes: attributes) { |ctx| yield ctx }
+        with(attributes: attributes, &)
       end
     end
   end

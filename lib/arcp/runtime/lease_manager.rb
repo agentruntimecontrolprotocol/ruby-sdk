@@ -34,12 +34,12 @@ module Arcp
           )
         end
 
-        unless lease.capabilities.include?(capability)
-          raise Arcp::Errors::PermissionDenied.new(
-            "capability #{capability.inspect} not in lease #{lease.id}",
-            details: { 'capability' => capability, 'lease_id' => lease.id }
-          )
-        end
+        return if lease.capabilities.include?(capability)
+
+        raise Arcp::Errors::PermissionDenied.new(
+          "capability #{capability.inspect} not in lease #{lease.id}",
+          details: { 'capability' => capability, 'lease_id' => lease.id }
+        )
       end
 
       # Try to decrement the bound budget. Returns true on success, raises
