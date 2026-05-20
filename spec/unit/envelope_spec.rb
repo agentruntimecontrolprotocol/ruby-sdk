@@ -3,12 +3,12 @@
 require 'spec_helper'
 
 RSpec.describe Arcp::Envelope do
-  it 'builds with the v1 wire fields' do
+  it 'builds with the v1.1 wire fields' do
     env = described_class.build(
       type: 'session.hello', session_id: 's_1',
       payload: { 'features' => ['heartbeat'] }
     )
-    expect(env.arcp).to eq('1')
+    expect(env.arcp).to eq('1.1')
     expect(env.type).to eq('session.hello')
     expect(env.session_id).to eq('s_1')
     expect(env.event_seq).to be_nil
@@ -34,7 +34,7 @@ RSpec.describe Arcp::Envelope do
   it 'rejects non-Integer event_seq' do
     expect do
       described_class.from_h(
-        'arcp' => '1', 'id' => 'x', 'type' => 'job.event', 'session_id' => 's',
+        'arcp' => '1.1', 'id' => 'x', 'type' => 'job.event', 'session_id' => 's',
         'event_seq' => '7', 'payload' => {}
       )
     end.to raise_error(Arcp::Errors::InvalidRequest)
