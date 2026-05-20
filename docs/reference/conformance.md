@@ -10,5 +10,5 @@ order: 52
 The full spec-to-code matrix lives at the repo root:
 [../../CONFORMANCE.md](../../CONFORMANCE.md).
 
-Every MUST/SHOULD in `../spec/docs/draft-arcp-02.1.md` §4–§16 is
+Every MUST/SHOULD in `../spec/docs/draft-arcp-1.1.md` §4–§16 is
 implemented and cites the file under `lib/arcp/` that satisfies it.

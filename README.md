@@ -1,7 +1,7 @@
 # arcp
 
 Ruby SDK for ARCP v1. The wire protocol is specified in
-[../spec/docs/draft-arcp-02.1.md](../spec/docs/draft-arcp-02.1.md). This
+[../spec/docs/draft-arcp-1.1.md](../spec/docs/draft-arcp-1.1.md). This
 gem implements the full v1 envelope, session handshake, job lifecycle,
 event stream, leases, and error model.
 

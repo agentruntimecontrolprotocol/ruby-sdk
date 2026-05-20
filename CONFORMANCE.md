@@ -1,6 +1,6 @@
 # Conformance
 
-Spec-to-code matrix against `../spec/docs/draft-arcp-02.1.md`. Status is
+Spec-to-code matrix against `../spec/docs/draft-arcp-1.1.md`. Status is
 either "yes" (implemented and tested) or "deferred" (out of scope for
 v1.0.0). No spec MUST/SHOULD in §4–§16 is unimplemented.
 
