@@ -6,7 +6,7 @@ digraph CapabilityNegotiation {
   rankdir=TB;
   bgcolor="transparent";
   compound=true;
-  fontname="Helvetica";
+  fontname="TT Commons Pro Trial";
   splines=spline;
   nodesep=0.32;
   ranksep=0.55;
@@ -19,7 +19,7 @@ digraph CapabilityNegotiation {
     style="rounded,filled",
     fillcolor="#334155",
     color="#475569",
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=11,
     fontcolor="#F1F5F9",
     margin="0.22,0.11",
@@ -27,7 +27,7 @@ digraph CapabilityNegotiation {
   ];
 
   edge [
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=9,
     fontcolor="#94A3B8",
     color="#64748B",
@@ -41,7 +41,7 @@ digraph CapabilityNegotiation {
     style="rounded,filled";
     fillcolor="#0F172A";
     color="#334155";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#94A3B8";
     margin=14;
     labeljust=l;
@@ -65,7 +65,7 @@ digraph CapabilityNegotiation {
     style="rounded,filled";
     fillcolor="#1E293B";
     color="#334155";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#94A3B8";
     margin=14;
     labeljust=l;

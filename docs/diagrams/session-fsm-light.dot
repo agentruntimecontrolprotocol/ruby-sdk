@@ -6,7 +6,7 @@ digraph SessionFSM {
   rankdir=TB;
   bgcolor="transparent";
   compound=true;
-  fontname="Helvetica";
+  fontname="TT Commons Pro Trial";
   splines=spline;
   nodesep=0.32;
   ranksep=0.55;
@@ -19,7 +19,7 @@ digraph SessionFSM {
     style="rounded,filled",
     fillcolor="white",
     color="#CBD5E1",
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=11,
     fontcolor="#1F2937",
     margin="0.22,0.11",
@@ -27,7 +27,7 @@ digraph SessionFSM {
   ];
 
   edge [
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=9,
     fontcolor="#64748B",
     color="#94A3B8",

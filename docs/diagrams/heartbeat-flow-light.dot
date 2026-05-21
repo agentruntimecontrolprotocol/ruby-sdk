@@ -6,7 +6,7 @@ digraph HeartbeatFlow {
   rankdir=TB;
   bgcolor="transparent";
   compound=true;
-  fontname="Helvetica";
+  fontname="TT Commons Pro Trial";
   splines=spline;
   nodesep=0.32;
   ranksep=0.55;
@@ -19,7 +19,7 @@ digraph HeartbeatFlow {
     style="rounded,filled",
     fillcolor="white",
     color="#CBD5E1",
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=11,
     fontcolor="#1F2937",
     margin="0.22,0.11",
@@ -27,7 +27,7 @@ digraph HeartbeatFlow {
   ];
 
   edge [
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=9,
     fontcolor="#64748B",
     color="#94A3B8",
@@ -47,7 +47,7 @@ digraph HeartbeatFlow {
     style="rounded,filled";
     fillcolor="#F1F5F9";
     color="#E2E8F0";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#475569";
     margin=14;
     labeljust=l;
@@ -71,7 +71,7 @@ digraph HeartbeatFlow {
     style="rounded,filled";
     fillcolor="#F8FAFC";
     color="#E2E8F0";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#475569";
     margin=14;
     labeljust=l;
