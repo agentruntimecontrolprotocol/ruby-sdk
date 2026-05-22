@@ -34,9 +34,21 @@ module Arcp
       attr_reader agent: String
       attr_reader submitted_at: String?
       attr_reader lease: Arcp::Lease::Lease?
+      attr_reader credentials: Array[Arcp::Credential]?
       def subscribe: (client: Arcp::Client, **untyped) -> Enumerator[Event, void]
       def cancel: (client: Arcp::Client, ?reason: String?) -> Envelope
       def get_result: (client: Arcp::Client) -> Result
+      def credential_for: (endpoint: String) -> Arcp::Credential?
+    end
+
+    class Accepted
+      attr_reader job_id: String
+      attr_reader agent: String
+      attr_reader accepted_at: String?
+      attr_reader lease: Arcp::Lease::Lease?
+      attr_reader credentials: Array[Arcp::Credential]?
+      def self.from_h: (Hash[String | Symbol, untyped]) -> Accepted
+      def to_h: () -> Hash[String, untyped]
     end
 
     class Summary

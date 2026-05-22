@@ -48,9 +48,22 @@ module Arcp
              body: Arcp::Job::EventBody::Metric.new(name: name, value: value, unit: unit))
       end
 
-      def status(phase:, message: nil)
+      def status(phase:, message: nil, fields: {})
         emit(kind: Arcp::Job::EventKind::STATUS,
-             body: Arcp::Job::EventBody::Status.new(phase: phase, message: message))
+             body: Arcp::Job::EventBody::Status.new(phase: phase, message: message,
+                                                    fields: fields))
+      end
+
+      def rotate_credential(id:, new_value:)
+        new_id = @sink.runtime.credential_registry&.rotate(
+          job_id: job_id,
+          credential_id: id,
+          new_value: new_value
+        )
+        status(
+          phase: 'credential_rotated',
+          fields: { 'id' => new_id || id, 'value' => new_value }
+        )
       end
 
       def tool_call(call_id:, tool:, args:)

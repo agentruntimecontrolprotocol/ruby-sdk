@@ -140,7 +140,9 @@ module Arcp
       accepted = Arcp::Job::Accepted.from_h(accepted_env.payload)
       Arcp::Job::Handle.new(
         job_id: accepted.job_id, agent: accepted.agent,
-        submitted_at: accepted.accepted_at, lease: accepted.lease
+        submitted_at: accepted.accepted_at,
+        lease: accepted.lease,
+        credentials: accepted.credentials
       )
     end
 

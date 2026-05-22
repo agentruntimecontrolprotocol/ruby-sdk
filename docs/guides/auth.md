@@ -1,14 +1,12 @@
 ---
 title: Authentication
 sdk: ruby
-kind: concept
-order: 18
+kind: guide
+order: 11
 spec_sections: [§6.1]
 ---
 
 # Authentication
-
-## What
 
 `session.hello` carries an `auth` block. The runtime's `AuthScheme`
 implementation inspects it and returns an `Arcp::Auth::Principal` or
@@ -22,8 +20,12 @@ strings to principals.
 ```ruby
 verifier = Arcp::Auth::Bearer.new(
   tokens: {
-    'tk-alice' => Arcp::Auth::Principal.new(id: 'alice', name: 'Alice', scopes: ['jobs.submit'].freeze),
-    'tk-bob'   => Arcp::Auth::Principal.new(id: 'bob',   name: 'Bob',   scopes: [].freeze)
+    'tk-alice' => Arcp::Auth::Principal.new(
+      id: 'alice', name: 'Alice', scopes: ['jobs.submit'].freeze
+    ),
+    'tk-bob'   => Arcp::Auth::Principal.new(
+      id: 'bob',   name: 'Bob',   scopes: [].freeze
+    )
   }
 )
 
@@ -48,10 +50,13 @@ class HmacAuth
 
   def verify(token)
     return nil if token.nil?
+
     principal, signature = token.split(':', 2)
     return nil if principal.nil? || signature.nil?
+
     expected = OpenSSL::HMAC.hexdigest('SHA256', ENV.fetch('AUTH_SECRET'), principal)
     return nil unless OpenSSL.fixed_length_secure_compare(expected, signature)
+
     Arcp::Auth::Principal.new(id: principal, name: principal, scopes: [].freeze)
   end
 end
@@ -64,4 +69,4 @@ raised on the client as `Arcp::Errors::Unauthenticated`.
 
 ## See also
 
-- `concepts/sessions.md`
+- `guides/sessions.md`

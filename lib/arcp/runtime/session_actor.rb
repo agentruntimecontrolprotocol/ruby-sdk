@@ -198,17 +198,21 @@ module Arcp
           session_id: @session_id, session_actor: self
         )
         if result.is_a?(Array)
-          job_id, resolved_agent, lease = result
+          job_id, resolved_agent, lease, credentials = result
           accepted = Arcp::Job::Accepted.new(
             job_id: job_id, agent: resolved_agent,
-            accepted_at: @runtime.clock.now.iso8601, lease: lease
+            accepted_at: @runtime.clock.now.iso8601,
+            lease: lease,
+            credentials: credentials
           )
         else
           job_id = result
           record = @runtime.job_manager.lookup(job_id)
           accepted = Arcp::Job::Accepted.new(
             job_id: job_id, agent: record.agent,
-            accepted_at: record.created_at, lease: @runtime.lease_manager.get(job_id)
+            accepted_at: record.created_at,
+            lease: @runtime.lease_manager.get(job_id),
+            credentials: nil
           )
         end
         send_envelope(Arcp::Envelope.build(

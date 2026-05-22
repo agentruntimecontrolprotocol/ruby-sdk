@@ -43,11 +43,24 @@ RSpec.describe Arcp::Lease::LeaseConstraints do
   end
 end
 
+RSpec.describe Arcp::Lease::LeaseRequest do
+  it 'round-trips model.use patterns' do
+    request = described_class.from_h(
+      'capabilities' => ['cost.spend'],
+      'model.use' => ['tier-fast/*']
+    )
+
+    expect(request.model_use).to eq(['tier-fast/*'])
+    expect(request.to_h['model.use']).to eq(['tier-fast/*'])
+  end
+end
+
 RSpec.describe Arcp::Lease::Subsetting do
   let(:parent) do
     Arcp::Lease::Lease.new(
       id: 'lse_p', capabilities: %w[fs.read net.fetch],
       budget: Arcp::Lease::CostBudget.parse(['USD:5.00']),
+      model_use: ['tier-fast/*'],
       expires_at: '2026-05-14T12:00:00Z', issued_at: '2026-05-14T10:00:00Z'
     )
   end
@@ -78,5 +91,25 @@ RSpec.describe Arcp::Lease::Subsetting do
     expect(child.capabilities).to eq(%w[fs.read])
     expect(child.expires_at).to eq('2026-05-14T11:30:00Z')
     expect(child.budget.remaining('USD')).to eq(BigDecimal('2.00'))
+  end
+
+  it 'rejects model.use expansion' do
+    request = Arcp::Lease::LeaseRequest.new(
+      capabilities: %w[fs.read],
+      model_use: ['anthropic/*']
+    )
+
+    expect { described_class.bound(parent: parent, request: request) }
+      .to raise_error(Arcp::Errors::LeaseSubsetViolation)
+  end
+
+  it 'allows a child model literal inside a parent model glob' do
+    request = Arcp::Lease::LeaseRequest.new(
+      capabilities: %w[fs.read],
+      model_use: ['tier-fast/gpt-4o']
+    )
+
+    child = described_class.bound(parent: parent, request: request)
+    expect(child.model_use).to eq(['tier-fast/gpt-4o'])
   end
 end

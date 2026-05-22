@@ -92,3 +92,86 @@ and per-job stream queues.
 
 The two never share memory across a real network. Same-process tests use
 `MemoryTransport.pair` so a single Ruby process can host both.
+
+## Capabilities
+
+A session's `CapabilitySet` advertises `features`, `encodings`, and
+(server-side) an `AgentInventory`. The handshake intersects client and
+server sets; the result is stored on `client.session.capabilities`.
+
+### Feature constants
+
+```ruby
+Arcp::Session::Feature::HEARTBEAT         # 'heartbeat'
+Arcp::Session::Feature::ACK               # 'ack'
+Arcp::Session::Feature::LIST_JOBS         # 'list_jobs'
+Arcp::Session::Feature::SUBSCRIBE         # 'subscribe'
+Arcp::Session::Feature::LEASE_EXPIRES_AT  # 'lease_expires_at'
+Arcp::Session::Feature::COST_BUDGET       # 'cost.budget'
+Arcp::Session::Feature::PROGRESS          # 'progress'
+Arcp::Session::Feature::RESULT_CHUNK      # 'result_chunk'
+Arcp::Session::Feature::AGENT_VERSIONS    # 'agent_versions'
+```
+
+`Arcp::Session::Feature::ALL` is a frozen Array of all nine.
+
+### Negotiation
+
+```ruby
+client_caps = Arcp::Session::CapabilitySet.local(
+  features:  ['heartbeat', 'list_jobs'],
+  encodings: ['utf8']
+)
+server_caps = Arcp::Session::CapabilitySet.local(
+  features:  ['heartbeat', 'subscribe'],
+  encodings: ['utf8', 'base64']
+)
+
+effective = client_caps.intersect(server_caps)
+effective.features  # ['heartbeat']  -- intersection
+effective.encodings # ['utf8']       -- intersection
+```
+
+`Arcp::Client.open` performs this intersection automatically.
+
+### Checking a negotiated feature
+
+```ruby
+if client.session.supports?(Arcp::Session::Feature::SUBSCRIBE)
+  client.subscribe_job(job_id: id, history: true, from_event_seq: 0)
+end
+```
+
+Calling a feature method without the negotiated capability raises
+`Arcp::Errors::UnnegotiatedFeature`.
+
+## Agent versioning
+
+Agents declare a fixed set of versions and one default. Clients submit
+either by name (uses the default) or by `name@version` (pin).
+
+```ruby
+runtime.register_agent(
+  name: 'code-refactor',
+  versions: %w[1.0.0 2.0.0],
+  default: '2.0.0',
+  handler: ->(ctx) { ctx.finish(result: ctx.agent) }
+)
+
+client.submit_job(agent: 'code-refactor')        # resolves to 2.0.0
+client.submit_job(agent: 'code-refactor@1.0.0')  # pins to 1.0.0
+```
+
+An unknown version raises `Arcp::Errors::AgentVersionNotAvailable` with
+`details['available_versions']` populated. `AgentInventory#resolve(ref)`
+can validate a ref before submit:
+
+```ruby
+client.session.capabilities.agents.resolve('code-refactor@1.0.0')
+# => 'code-refactor@1.0.0'
+client.session.capabilities.agents.resolve('code-refactor@9.9.9')
+# => nil
+```
+
+See [guides/agent-versioning.md](guides/agent-versioning.md) for the full
+versioning guide.

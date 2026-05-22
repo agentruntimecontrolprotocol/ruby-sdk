@@ -16,7 +16,7 @@ v1.0.0). No spec MUST/SHOULD in §4–§16 is unimplemented.
 | §6.1 Bearer auth scheme | yes | `lib/arcp/auth/bearer.rb` |
 | §6.1 Pluggable AuthScheme | yes | `lib/arcp/auth/auth_scheme.rb` |
 | §6.2 Capability negotiation (intersection) | yes | `lib/arcp/session/capability_set.rb#intersect` |
-| §6.2 Feature names: heartbeat, ack, list_jobs, subscribe, lease_expires_at, cost.budget, progress, result_chunk, agent_versions | yes | `lib/arcp/session/feature.rb` |
+| §6.2 Feature names: heartbeat, ack, list_jobs, subscribe, lease_expires_at, cost.budget, progress, result_chunk, agent_versions, model.use, provisioned_credentials | yes | `lib/arcp/session/feature.rb` |
 | §6.3 session.welcome with resume_token + resume_window_sec | yes | `lib/arcp/session/welcome.rb`, `lib/arcp/runtime/session_actor.rb` |
 | §6.3 Resume by last_event_seq | yes | `lib/arcp/runtime/event_log.rb` |
 | §6.4 session.ping / session.pong heartbeats | yes | `lib/arcp/session/ping.rb`, `lib/arcp/session/pong.rb`, `lib/arcp/client.rb#start_heartbeat!` |
@@ -51,6 +51,9 @@ v1.0.0). No spec MUST/SHOULD in §4–§16 is unimplemented.
 | §9.6 cost.budget capability (BigDecimal per currency) | yes | `lib/arcp/lease.rb#CostBudget` |
 | §9.6 BudgetCounter try_decrement | yes | `lib/arcp/lease.rb#BudgetCounter` |
 | §9.6 BUDGET_EXHAUSTED on overspend | yes | `lib/arcp/runtime/lease_manager.rb` |
+| §9.7 model.use capability and lease checks | yes | `lib/arcp/lease.rb`, `lib/arcp/runtime/lease_manager.rb#check_model!` |
+| §9.8 provisioned credential wire shape | yes | `lib/arcp/credential.rb`, `lib/arcp/job/accepted.rb` |
+| §9.8 credential provisioner and revocation lifecycle | yes | `lib/arcp/credential_provisioner.rb`, `lib/arcp/runtime/credential_registry.rb`, `lib/arcp/runtime/job_manager.rb` |
 | §10 Delegate event kind with child lease | yes | `lib/arcp/job/event_body/delegate.rb` |
 | §10 LEASE_SUBSET_VIOLATION on excess | yes | `lib/arcp/lease.rb#Subsetting.bound` |
 | §11 trace_id propagation on envelope | yes | `lib/arcp/envelope.rb`, `lib/arcp/client.rb#send_envelope` |
