@@ -23,7 +23,6 @@ Gem::Specification.new do |spec|
   spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/ruby-sdk/CHANGELOG.md"
   spec.metadata['source_code_uri']       = 'https://github.com/nficano/arpc.git'
   spec.metadata['bug_tracker_uri']       = "#{spec.homepage}/issues"
-  spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.files = Dir[
     'lib/**/*.rb',
