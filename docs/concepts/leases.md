@@ -11,7 +11,8 @@ spec_sections: [§9]
 ## What
 
 A lease is the runtime's grant of authority to a job: a set of
-capabilities, an optional expiry, and an optional per-currency budget.
+capabilities, an optional expiry, optional model patterns, and an
+optional per-currency budget.
 The runtime issues one on `job.accepted` and attaches it to the job
 context. Delegation requires the child lease to be a strict subset.
 
@@ -47,6 +48,29 @@ budget.remaining('USD') # => BigDecimal('1.00')
 `BudgetCounter#try_spend!` atomically decrements; overspend raises
 `Arcp::Errors::BudgetExhausted`.
 
+## model.use
+
+```ruby
+lease_request = Arcp::Lease::LeaseRequest.new(
+  capabilities: ['cost.spend'],
+  model_use: ['tier-fast/*']
+)
+```
+
+`model.use` is a set of glob patterns for model ids. Runtime code in the
+path of an LLM call can enforce it with:
+
+```ruby
+$arcp_runtime.lease_manager.check_model!(
+  ctx.job_id,
+  model_id: 'tier-fast/gpt-4o-mini'
+)
+```
+
+A miss raises `Arcp::Errors::PermissionDenied`. Delegate subsetting also
+checks `model.use`; a child may keep the same pattern or narrow a parent
+glob to a literal model id.
+
 ## Subsetting on delegate
 
 ```ruby
@@ -54,6 +78,7 @@ parent = $arcp_runtime.lease_manager.get(ctx.job_id)
 child_request = Arcp::Lease::LeaseRequest.new(
   capabilities: ['compute.read'],
   budget: Arcp::Lease::CostBudget.parse(['USD:0.25']),
+  model_use: ['tier-fast/gpt-4o-mini'],
   expires_at: nil
 )
 child = Arcp::Lease::Subsetting.bound(parent: parent, request: child_request)
@@ -66,3 +91,4 @@ above parent's remaining all raise `Arcp::Errors::LeaseSubsetViolation`.
 
 - `concepts/delegation.md`
 - `guides/budgets.md`
+- `guides/credentials.md`

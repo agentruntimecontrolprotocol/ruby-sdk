@@ -15,20 +15,20 @@ module Harness
 
   StderrLogger = Logger.new(
     $stderr, level: Logger::INFO,
-    formatter: ->(sev, _, _, msg) { "[#{sev}] #{msg}\n" }
+             formatter: ->(sev, _, _, msg) { "[#{sev}] #{msg}\n" }
   )
 
-  def run_or_exit(name, &block)
+  def run_or_exit(name)
     emitted = false
-    yielder = ->(asserts) {
+    yielder = lambda do |asserts|
       raise 'emit called twice' if emitted
 
       emitted = true
       $stdout.puts JSON.dump({ 'sample' => name, 'ok' => true, 'asserts' => asserts })
-    }
+    end
 
     Sync do
-      block.call(yielder)
+      yield yielder
     end
     raise 'sample did not emit' unless emitted
 
@@ -62,14 +62,15 @@ module Harness
     Arcp::FakeClock.new(now: Time.iso8601(start))
   end
 
-  def runtime(agents: {}, auth_tokens: { 'demo' => 'alice' }, heartbeat_interval_sec: nil, clock: nil)
+  def runtime(agents: {}, auth_tokens: { 'demo' => 'alice' }, heartbeat_interval_sec: nil, clock: nil, **kw)
     tokens = auth_tokens.transform_values do |id|
       Arcp::Auth::Principal.new(id: id, name: id, scopes: [].freeze)
     end
     r = Arcp::Runtime::Runtime.new(
       auth_verifier: Arcp::Auth::Bearer.new(tokens: tokens),
       heartbeat_interval_sec: heartbeat_interval_sec,
-      clock: clock || Arcp::SystemClock.new
+      clock: clock || Arcp::SystemClock.new,
+      **kw
     )
     agents.each do |name, spec|
       if spec.is_a?(Hash)

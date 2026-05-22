@@ -23,6 +23,40 @@ RSpec.describe Arcp::Session::CapabilitySet do
   end
 end
 
+RSpec.describe Arcp::Runtime::Runtime do
+  let(:auth) do
+    principal = Arcp::Auth::Principal.new(id: 'alice', name: 'alice', scopes: [].freeze)
+    Arcp::Auth::Bearer.new(tokens: { 'demo' => principal })
+  end
+
+  it 'does not advertise provisioned credentials without a provisioner' do
+    runtime = described_class.new(auth_verifier: auth)
+
+    expect(runtime.local_capabilities.features).not_to include('model.use')
+    expect(runtime.local_capabilities.features).not_to include('provisioned_credentials')
+  end
+
+  it 'advertises provisioned credentials when a provisioner is configured' do
+    runtime = described_class.new(
+      auth_verifier: auth,
+      credential_provisioner: Arcp::Credentials::InMemoryProvisioner.new
+    )
+
+    expect(runtime.local_capabilities.features).to include('model.use')
+    expect(runtime.local_capabilities.features).to include('provisioned_credentials')
+  end
+
+  it 'rejects durable revocation mode without a store' do
+    expect do
+      described_class.new(
+        auth_verifier: auth,
+        credential_provisioner: Arcp::Credentials::InMemoryProvisioner.new,
+        require_durable_store: true
+      )
+    end.to raise_error(Arcp::Errors::InvalidRequest)
+  end
+end
+
 RSpec.describe Arcp::Session::AgentInventory do
   let(:inv) do
     described_class.from_array([

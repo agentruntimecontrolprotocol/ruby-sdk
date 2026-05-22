@@ -16,6 +16,8 @@ module Arcp
     # Owns agent registry + per-job lifecycle. Submitted jobs run as
     # child `Async::Task`s; cancellation propagates via `task.stop`.
     class JobManager
+      attr_reader :runtime
+
       def initialize(runtime:, lease_manager:, subscription_manager:, event_log:, clock: Arcp::SystemClock.new)
         @runtime = runtime
         @leases = lease_manager
@@ -85,6 +87,9 @@ module Arcp
 
         lease = build_lease(submit, job_id)
         @leases.register(job_id, lease) if lease
+        credentials = issue_credentials(
+          job_id: job_id, lease: lease, agent: resolved, principal_id: principal_id
+        )
 
         record = JobRecord.new(
           job_id: job_id, agent: resolved, principal_id: principal_id,
@@ -103,7 +108,7 @@ module Arcp
         end
         @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(task: task, status: 'running') }
 
-        [job_id, resolved, lease]
+        [job_id, resolved, lease, credentials]
       end
 
       def cancel(job_id:, principal_id:, reason: nil)
@@ -179,6 +184,7 @@ module Arcp
         @event_log.append(env.session_id, env)
         @subs.fanout(job_id, env)
         @subs.clear(job_id)
+        @runtime.credential_registry&.revoke_all(job_id: job_id)
         @leases.revoke(job_id)
       end
 
@@ -195,10 +201,19 @@ module Arcp
         @event_log.append(env.session_id, env)
         @subs.fanout(job_id, env)
         @subs.clear(job_id)
+        @runtime.credential_registry&.revoke_all(job_id: job_id)
         @leases.revoke(job_id)
       end
 
       private
+
+      def issue_credentials(job_id:, lease:, agent:, principal_id:)
+        return nil unless @runtime.credential_registry
+
+        @runtime.credential_registry.issue_for(
+          job_id: job_id, lease: lease, agent: agent, principal_id: principal_id
+        )
+      end
 
       def build_lease(submit, job_id)
         return nil unless submit.lease_request
@@ -207,6 +222,7 @@ module Arcp
           id: "lse_#{job_id}",
           capabilities: submit.lease_request.capabilities,
           budget: submit.lease_request.budget,
+          model_use: submit.lease_request.model_use,
           expires_at: submit.lease_constraints&.expires_at || submit.lease_request.expires_at,
           issued_at: @clock.now.iso8601
         )

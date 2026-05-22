@@ -11,8 +11,10 @@ module Arcp
       attr_reader lease_manager: LeaseManager
       attr_reader subscription_manager: SubscriptionManager
       attr_reader event_log: EventLog
+      attr_reader credential_registry: CredentialRegistry?
+      attr_reader enforce_model_use: bool
 
-      def initialize: (auth_verifier: untyped, ?name: String, ?version: String, ?heartbeat_interval_sec: Integer?, ?resume_window_sec: Integer, ?clock: untyped) -> void
+      def initialize: (auth_verifier: untyped, ?name: String, ?version: String, ?heartbeat_interval_sec: Integer?, ?resume_window_sec: Integer, ?clock: untyped, ?credential_provisioner: Arcp::CredentialProvisioner?, ?credential_store: Arcp::Credentials::CredentialStore?, ?require_durable_store: bool, ?enforce_model_use: bool) -> void
       def register_agent: (name: String, versions: Array[String], default: String, handler: ^(JobContext) -> void) -> void
       def local_capabilities: (?agents_inventory: bool) -> Arcp::Session::CapabilitySet
       def accept: (Arcp::Transport::Base) -> untyped
@@ -20,10 +22,20 @@ module Arcp
     end
 
     class JobManager end
-    class LeaseManager end
+    class LeaseManager
+      def check_model!: (String, model_id: String) -> bool
+    end
+    class CredentialRegistry
+      def issue_for: (job_id: String, lease: Arcp::Lease::Lease?, agent: String, principal_id: String) -> Array[Arcp::Credential]
+      def rotate: (job_id: String, credential_id: String, new_value: String) -> String
+      def revoke_all: (job_id: String) -> Integer
+      def reconcile_on_startup!: () -> void
+    end
     class SubscriptionManager end
     class EventLog end
-    class JobContext end
+    class JobContext
+      def rotate_credential: (id: String, new_value: String) -> untyped
+    end
     class SessionActor end
   end
 end

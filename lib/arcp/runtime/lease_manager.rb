@@ -5,8 +5,9 @@ module Arcp
     # Tracks per-job leases and bound budget counters. The runtime asks
     # `#check!(job_id, capability:)` before every authority op.
     class LeaseManager
-      def initialize(clock: Arcp::SystemClock.new)
+      def initialize(clock: Arcp::SystemClock.new, enforce_model_use: false)
         @clock = clock
+        @enforce_model_use = enforce_model_use
         @leases = {}
         @counters = {}
         @mutex = Mutex.new
@@ -39,6 +40,18 @@ module Arcp
         raise Arcp::Errors::PermissionDenied.new(
           "capability #{capability.inspect} not in lease #{lease.id}",
           details: { 'capability' => capability, 'lease_id' => lease.id }
+        )
+      end
+
+      def check_model!(job_id, model_id:)
+        lease = get(job_id)
+        return true if lease.nil? && !@enforce_model_use
+
+        return true if lease&.model_use && Arcp::ModelPattern.match?(lease.model_use, model_id)
+
+        raise Arcp::Errors::PermissionDenied.new(
+          "model #{model_id.inspect} not permitted by lease",
+          details: { 'model' => model_id, 'lease_id' => lease&.id }
         )
       end
 

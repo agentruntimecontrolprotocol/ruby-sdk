@@ -4,6 +4,7 @@ require 'bigdecimal'
 require 'time'
 
 require_relative 'errors'
+require_relative 'credential'
 
 module Arcp
   module Lease
@@ -76,7 +77,16 @@ module Arcp
       end
     end
 
-    LeaseRequest = Data.define(:capabilities, :budget, :expires_at) do
+    LeaseRequest = Data.define(:capabilities, :budget, :model_use, :expires_at) do
+      def initialize(capabilities:, budget: nil, model_use: nil, expires_at: nil)
+        super(
+          capabilities: Array(capabilities).freeze,
+          budget: budget,
+          model_use: model_use ? Array(model_use).freeze : nil,
+          expires_at: expires_at
+        )
+      end
+
       def self.from_h(h)
         return nil if h.nil?
 
@@ -84,6 +94,7 @@ module Arcp
         new(
           capabilities: Array(h['capabilities']).freeze,
           budget: h['cost.budget'] ? CostBudget.parse(h['cost.budget']) : nil,
+          model_use: h['model.use'] ? Array(h['model.use']).freeze : nil,
           expires_at: h['expires_at']
         )
       end
@@ -91,18 +102,31 @@ module Arcp
       def to_h
         out = { 'capabilities' => capabilities }
         out['cost.budget'] = budget.to_a if budget
-        out['expires_at']  = expires_at if expires_at
+        out['model.use'] = model_use if model_use
+        out['expires_at'] = expires_at if expires_at
         out
       end
     end
 
-    Lease = Data.define(:id, :capabilities, :budget, :expires_at, :issued_at) do
+    Lease = Data.define(:id, :capabilities, :budget, :model_use, :expires_at, :issued_at) do
+      def initialize(id:, capabilities:, issued_at:, budget: nil, model_use: nil, expires_at: nil)
+        super(
+          id: id,
+          capabilities: Array(capabilities).freeze,
+          budget: budget,
+          model_use: model_use ? Array(model_use).freeze : nil,
+          expires_at: expires_at,
+          issued_at: issued_at
+        )
+      end
+
       def self.from_h(h)
         h = h.transform_keys(&:to_s)
         new(
           id: h.fetch('id'),
           capabilities: Array(h['capabilities']).freeze,
           budget: h['cost.budget'] ? CostBudget.parse(h['cost.budget']) : nil,
+          model_use: h['model.use'] ? Array(h['model.use']).freeze : nil,
           expires_at: h['expires_at'],
           issued_at: h['issued_at']
         )
@@ -111,7 +135,8 @@ module Arcp
       def to_h
         out = { 'id' => id, 'capabilities' => capabilities, 'issued_at' => issued_at }
         out['cost.budget'] = budget.to_a if budget
-        out['expires_at']  = expires_at if expires_at
+        out['model.use'] = model_use if model_use
+        out['expires_at'] = expires_at if expires_at
         out
       end
 
@@ -160,13 +185,27 @@ module Arcp
           budget = request.budget
         end
 
+        model_use = bound_model_use(parent: parent, request: request)
+
         Lease.new(
           id: Arcp::Ids.session_id.sub(/^ses_/, 'lse_'),
           capabilities: request.capabilities,
           budget: budget,
+          model_use: model_use,
           expires_at: request.expires_at || parent.expires_at,
           issued_at: Time.now.utc.iso8601
         )
+      end
+
+      def bound_model_use(parent:, request:)
+        return nil unless request.model_use
+
+        unless request.model_use.all? { |pattern| Arcp::ModelPattern.implied_by?(parent.model_use, pattern) }
+          raise Arcp::Errors::LeaseSubsetViolation,
+                "child model.use expands beyond parent: #{request.model_use.inspect}"
+        end
+
+        request.model_use
       end
     end
   end

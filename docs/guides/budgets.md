@@ -46,6 +46,10 @@ end
 balance goes negative, the runtime emits `job.error` with code
 `BUDGET_EXHAUSTED`.
 
+When spend is enforced by an upstream gateway instead of local counters,
+configure provisioned credentials so `cost.budget` is baked into the issued
+key. See `docs/guides/credentials.md`.
+
 ## Client-side exhaustion
 
 ```ruby
