@@ -1,8 +1,8 @@
 ---
 title: Errors
 sdk: ruby
-kind: reference
-order: 50
+kind: guide
+order: 40
 spec_sections: [§12]
 ---
 
@@ -61,7 +61,11 @@ end
 ## Building from a wire payload
 
 ```ruby
-err = Arcp::Errors.for('LEASE_EXPIRED', message: 'lease expired', details: { 'lease_id' => 'lse_...' })
+err = Arcp::Errors.for(
+  'LEASE_EXPIRED',
+  message: 'lease expired',
+  details: { 'lease_id' => 'lse_...' }
+)
 raise err
 ```
 

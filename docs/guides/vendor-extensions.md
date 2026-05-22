@@ -1,14 +1,12 @@
 ---
 title: Vendor extensions
 sdk: ruby
-kind: concept
-order: 19
+kind: guide
+order: 50
 spec_sections: [§5.1, §8.2, §15]
 ---
 
 # Vendor extensions
-
-## What
 
 Event kinds prefixed `x-vendor.` carry implementation-specific data. The
 runtime forwards them verbatim; clients that don't recognize the prefix
@@ -38,8 +36,8 @@ body — no `EventBody` class is allocated.
 handle.subscribe(client: client).each do |event|
   if event.kind.start_with?('x-vendor.acme.')
     stage = event.body['stage']
-    pct = event.body['percent']
-    # ...
+    pct   = event.body['percent']
+    puts "#{stage}: #{pct}%"
   end
 end
 ```
@@ -48,4 +46,4 @@ end
 
 ## See also
 
-- `concepts/events.md`
+- `guides/job-events.md`
