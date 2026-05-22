@@ -122,3 +122,7 @@ RSpec/SpecFilePathFormat:
 # Allow modules to be split across files
 Style/ClassAndModuleChildren:
   EnforcedStyle: nested
+
+# CI publishing does not use MFA; rubygems_mfa_required is intentionally omitted.
+Gemspec/RequireMFA:
+  Enabled: false
