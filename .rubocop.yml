@@ -9,6 +9,7 @@ AllCops:
   SuggestExtensions: false
   Exclude:
     - 'samples/**/*'
+    - 'recipes/**/*'
     - 'tmp/**/*'
     - 'pkg/**/*'
     - 'vendor/**/*'
