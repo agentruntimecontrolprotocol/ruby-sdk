@@ -8,7 +8,7 @@ module Arcp
     # `job.result` / `job.error`.
     class SubscriptionManager
       def initialize
-        @subs = Hash.new { |h, k| h[k] = [] } # job_id => [[session_id, principal_id, queue], …]
+        @subs = Hash.new { |h, k| h[k] = [] } # job_id => [[session_id, principal_id, queue], ...]
         @owners = {}                          # job_id => principal_id (submitter)
         @mutex = Mutex.new
       end
