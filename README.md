@@ -7,6 +7,7 @@
   <a href="https://github.com/nficano/arpc/actions/workflows/test.yml"><img alt="CI" src="https://github.com/nficano/arpc/actions/workflows/test.yml/badge.svg"></a>
   <a href="https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md"><img alt="ARCP" src="https://img.shields.io/badge/ARCP-v1.1%20draft-blue"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-lightgrey"></a>
+  <a href="https://coderabbit.ai"><img alt="CodeRabbit" src="https://img.shields.io/coderabbit/prs/github/agentruntimecontrolprotocol/ruby-sdk?utm_source=oss&utm_medium=github&utm_campaign=agentruntimecontrolprotocol/ruby-sdk&labelColor=171717&color=FF570A&label=CodeRabbit+Reviews"></a>
 </p>
 
 <p align="center">
