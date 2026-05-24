@@ -18,7 +18,7 @@ v1.0.0). No spec MUST/SHOULD in §4–§16 is unimplemented.
 | §6.2 Capability negotiation (intersection) | yes | `lib/arcp/session/capability_set.rb#intersect` |
 | §6.2 Feature names: heartbeat, ack, list_jobs, subscribe, lease_expires_at, cost.budget, progress, result_chunk, agent_versions, model.use, provisioned_credentials | yes | `lib/arcp/session/feature.rb` |
 | §6.3 session.welcome with resume_token + resume_window_sec | yes | `lib/arcp/session/welcome.rb`, `lib/arcp/runtime/session_actor.rb` |
-| §6.3 Resume by last_event_seq | yes | `lib/arcp/runtime/event_log.rb` |
+| §6.3 Resume by last_event_seq | deferred | n/a |
 | §6.4 session.ping / session.pong heartbeats | yes | `lib/arcp/session/ping.rb`, `lib/arcp/session/pong.rb`, `lib/arcp/client.rb#start_heartbeat!` |
 | §6.4 HEARTBEAT_LOST MUST NOT terminate jobs | yes | `lib/arcp/runtime/session_actor.rb` |
 | §6.5 session.ack with last_processed_seq | yes | `lib/arcp/session/ack.rb`, `lib/arcp/client.rb#ack` |

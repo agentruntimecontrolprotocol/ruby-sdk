@@ -22,14 +22,15 @@ fibers. Use `falcon` for hosting.
 ## `IOError: transport closed` after `client.close`
 
 Expected. After `close`, all client methods raise. Open a new client
-to reconnect; reuse the `resume_token` from the prior session to
-replay missed events.
+to reconnect; if you need missed events, resubscribe with
+`history: true` and `from_event_seq: 0` while the runtime's event-log
+window still retains them.
 
 ## `Arcp::Errors::ResumeWindowExpired` on reconnect
 
-The runtime's `resume_window_sec` elapsed before reconnect. The job's
-event log entries were evicted. Submit a fresh subscription with
-`history: true, from_event_seq: 0` if the job is still live.
+The runtime's event-log retention window elapsed before you asked for a
+replay. Submit a fresh subscription with `history: true, from_event_seq:
+0` if the job is still live.
 
 ## `Arcp::Errors::LeaseSubsetViolation` on `Subsetting.bound`
 

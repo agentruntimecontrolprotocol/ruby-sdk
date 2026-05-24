@@ -86,7 +86,7 @@ digraph ArcpModuleDeps {
     SubMgr  [label="SubscriptionManager"];
 
     EventLog [
-      label=<<FONT POINT-SIZE="10">EventLog</FONT><BR/><FONT POINT-SIZE="8" COLOR="#64748B">SQLite</FONT>>,
+      label=<<FONT POINT-SIZE="10">EventLog</FONT><BR/><FONT POINT-SIZE="8" COLOR="#64748B">In-memory</FONT>>,
       shape=cylinder, fillcolor="#1E293B"
     ];
   }

@@ -107,8 +107,9 @@ HANDLER = lambda do |ctx|
 end
 ```
 
-`try_spend!` atomically decrements the lease's `BudgetCounter`. If the
-balance goes negative, the runtime emits `job.error` with code
+`Arcp::Runtime::LeaseManager#try_spend!` atomically decrements the
+lease's `BudgetCounter` by calling `BudgetCounter#try_decrement`. If the
+balance is insufficient, the runtime emits `job.error` with code
 `BUDGET_EXHAUSTED`.
 
 When spend is enforced by an upstream gateway instead of local counters,
@@ -121,7 +122,7 @@ issued key — see `guides/credentials.md`.
 begin
   handle.get_result(client: client)
 rescue Arcp::Errors::BudgetExhausted => e
-  e.details # { 'currency' => 'USD', 'requested' => ..., 'remaining' => ... }
+  e.details # { 'currency' => 'USD', 'remaining' => '0.30' }
 end
 ```
 

@@ -8,6 +8,7 @@ require_relative 'credential'
 
 module Arcp
   module Lease
+    # Immutable lease bounds attached to a job request or granted lease.
     LeaseConstraints = Data.define(:expires_at, :max_budget) do
       def self.from_h(h)
         return nil if h.nil?
@@ -31,6 +32,7 @@ module Arcp
       end
     end
 
+    # A currency-indexed budget that round-trips on the wire as strings.
     CostBudget = Data.define(:per_currency) do
       def self.parse(entries)
         h = {}
@@ -53,6 +55,7 @@ module Arcp
       def currencies = per_currency.keys
     end
 
+    # Mutable counter used to track spent budget for a live job.
     class BudgetCounter
       attr_reader :remaining
 
@@ -77,6 +80,7 @@ module Arcp
       end
     end
 
+    # Lease request supplied when submitting a job.
     LeaseRequest = Data.define(:capabilities, :budget, :model_use, :expires_at) do
       def initialize(capabilities:, budget: nil, model_use: nil, expires_at: nil)
         super(
@@ -108,6 +112,7 @@ module Arcp
       end
     end
 
+    # Lease granted to a job after submission is accepted.
     Lease = Data.define(:id, :capabilities, :budget, :model_use, :expires_at, :issued_at) do
       def initialize(id:, capabilities:, issued_at:, budget: nil, model_use: nil, expires_at: nil)
         super(

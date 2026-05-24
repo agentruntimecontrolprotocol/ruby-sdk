@@ -24,6 +24,8 @@ module Arcp
                   :job_manager, :lease_manager, :subscription_manager,
                   :event_log, :credential_registry, :enforce_model_use
 
+      # Builds a runtime with the supplied auth, transport, and lifecycle
+      # configuration.
       def initialize(auth_verifier:, name: 'arcp-runtime', version: Arcp::VERSION,
                      heartbeat_interval_sec: 30, resume_window_sec: 300,
                      clock: Arcp::SystemClock.new, credential_provisioner: nil,
@@ -61,10 +63,12 @@ module Arcp
         @mutex = Mutex.new
       end
 
+      # Registers an agent handler and its available versions.
       def register_agent(name:, versions:, default:, handler:)
         @job_manager.register_agent(name: name, versions: versions, default: default, handler: handler)
       end
 
+      # Returns the runtime's advertised local capabilities.
       def local_capabilities(agents_inventory: false)
         features = Arcp::Session::Feature::ALL.dup
         unless @credential_registry
@@ -80,21 +84,26 @@ module Arcp
         )
       end
 
+      # Accepts a transport and runs the session actor for it.
       def accept(transport)
         actor = SessionActor.new(runtime: self, transport: transport)
         actor.run
       end
 
+      # Registers an active session actor.
       def register_session(session_id, actor)
         @mutex.synchronize { @sessions[session_id] = actor }
       end
 
+      # Removes an active session actor.
       def deregister_session(session_id)
         @mutex.synchronize { @sessions.delete(session_id) }
       end
 
+      # Returns the actor for a live session id.
       def session(session_id) = @mutex.synchronize { @sessions[session_id] }
 
+      # Requests all active sessions to close.
       def shutdown(reason: nil)
         actors = @mutex.synchronize { @sessions.values.dup }
         actors.each { |a| a.send_envelope(bye_envelope(a.session_id, reason)) }

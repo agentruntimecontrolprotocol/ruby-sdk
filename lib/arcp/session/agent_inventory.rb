@@ -2,6 +2,7 @@
 
 module Arcp
   module Session
+    # One registered agent and its published versions.
     AgentEntry = Data.define(:name, :versions, :default) do
       def self.from_hash(h)
         h = h.transform_keys(&:to_s)
@@ -19,6 +20,7 @@ module Arcp
       end
     end
 
+    # Ordered registry of the agents advertised during session negotiation.
     AgentInventory = Data.define(:entries) do
       include Enumerable
 

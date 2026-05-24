@@ -202,7 +202,7 @@
 <path fill="#fafbfc" stroke="#cbd5e1" d="M900.72,-116.8C900.72,-119.13 884.71,-121.03 865,-121.03 845.29,-121.03 829.28,-119.13 829.28,-116.8 829.28,-116.8 829.28,-78.73 829.28,-78.73 829.28,-76.4 845.29,-74.5 865,-74.5 884.71,-74.5 900.72,-76.4 900.72,-78.73 900.72,-78.73 900.72,-116.8 900.72,-116.8"/>
 <path fill="none" stroke="#cbd5e1" d="M900.72,-116.8C900.72,-114.47 884.71,-112.57 865,-112.57 845.29,-112.57 829.28,-114.47 829.28,-116.8"/>
 <text xml:space="preserve" text-anchor="start" x="845.12" y="-98.27" font-family="TT Commons Pro Trial" font-size="10.00" fill="#1f2937">EventLog</text>
-<text xml:space="preserve" text-anchor="start" x="853.75" y="-90.17" font-family="TT Commons Pro Trial" font-size="8.00" fill="#94a3b8">SQLite</text>
+<text xml:space="preserve" text-anchor="start" x="853.75" y="-90.17" font-family="TT Commons Pro Trial" font-size="8.00" fill="#94a3b8">In-memory</text>
 </g>
 <!-- JobMgr&#45;&gt;EventLog -->
 <g id="edge16" class="edge">
