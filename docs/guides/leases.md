@@ -43,7 +43,8 @@ budget = Arcp::Lease::CostBudget.parse(['USD:1.00', 'EUR:0.50'])
 budget.remaining('USD') # => BigDecimal('1.00')
 ```
 
-`BudgetCounter#try_spend!` atomically decrements; overspend raises
+`Arcp::Runtime::LeaseManager#try_spend!` atomically decrements the
+bound counter via `BudgetCounter#try_decrement`; overspend raises
 `Arcp::Errors::BudgetExhausted`. See `guides/jobs.md` for the full
 spend workflow.
 

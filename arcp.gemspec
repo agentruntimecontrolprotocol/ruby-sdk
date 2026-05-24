@@ -11,9 +11,9 @@ Gem::Specification.new do |spec|
   spec.summary     = 'Reference Ruby implementation of the Agent Runtime Control Protocol (ARCP).'
   spec.description = <<~DESC
     Ruby SDK for ARCP: envelope and message model, fiber-based runtime, client,
-    WebSocket / stdio / in-memory transports, SQLite-backed resume log,
-    capability negotiation, leases with budget and expiration, streamed results,
-    and OpenTelemetry trace propagation. Built on socketry/async.
+    WebSocket / stdio / in-memory transports, in-memory event buffering for
+    replay, capability negotiation, leases with budget and expiration, streamed
+    results, and OpenTelemetry trace propagation. Built on socketry/async.
   DESC
   spec.homepage    = 'https://github.com/nficano/arpc'
   spec.license     = 'Apache-2.0'

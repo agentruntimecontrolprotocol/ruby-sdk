@@ -46,7 +46,7 @@ Arcp
     JobContext            # passed to handlers
     LeaseManager          # lease + budget accounting
     SubscriptionManager   # cross-session observers
-    EventLog              # replay window
+    EventLog              # in-memory replay window
   Transport
     Base / MemoryTransport / WebSocketTransport / StdioTransport
 ```
@@ -113,7 +113,7 @@ Arcp::Session::Feature::RESULT_CHUNK      # 'result_chunk'
 Arcp::Session::Feature::AGENT_VERSIONS    # 'agent_versions'
 ```
 
-`Arcp::Session::Feature::ALL` is a frozen Array of all nine.
+`Arcp::Session::Feature::ALL` is a frozen Array of all eleven.
 
 ### Negotiation
 
@@ -163,8 +163,8 @@ client.submit_job(agent: 'code-refactor@1.0.0')  # pins to 1.0.0
 ```
 
 An unknown version raises `Arcp::Errors::AgentVersionNotAvailable` with
-`details['available_versions']` populated. `AgentInventory#resolve(ref)`
-can validate a ref before submit:
+`details['available']` populated. `AgentInventory#resolve(ref)` can
+validate a ref before submit:
 
 ```ruby
 client.session.capabilities.agents.resolve('code-refactor@1.0.0')

@@ -163,11 +163,18 @@ end
 
 # Caller
 Sync do
-  Arcp::Client.connect(transport: transport) do |client|
+  client = nil
+  begin
+    client = Arcp::Client.open(
+      transport: transport,
+      auth: { 'scheme' => 'bearer', 'token' => ENV.fetch('ARCP_TOKEN') }
+    )
     puts Skills::SummarizeText.call(
       client: client,
       text:   'Long article text here...'
     ).inspect
+  ensure
+    client&.close
   end
 end
 ```
@@ -225,54 +232,53 @@ result = handle.get_result(client: client)
 puts result.output.inspect
 ```
 
-## Stream + resume (stream-resume)
+## Stream + replay (stream-resume)
 
-Assemble a chunked result across a simulated transport drop. The client
-reconnects with the saved `resume_token` and `last_event_seq`, and the
-runtime replays missed chunks from its event log.
+Assemble a chunked result across a simulated disconnect. The SDK does
+not transparently restore a dropped session yet, so the recovery step is
+to open a fresh client and replay the retained history with
+`history: true`.
 
 ```ruby
-resume_token  = nil
-last_seq      = 0
-assembled     = []
+job_id    = nil
+assembled = []
 
 # First connection — collect some chunks then simulate a drop
-Arcp::Client.connect(transport: first_transport) do |client|
+client = nil
+begin
+  client = Arcp::Client.open(
+    transport: first_transport,
+    auth: { 'scheme' => 'bearer', 'token' => ENV.fetch('ARCP_TOKEN') }
+  )
   handle = client.submit_job(agent: 'big-streamer')
-
-  handle.subscribe(client: client).each do |event|
-    case event.kind
-    when Arcp::Job::EventKind::RESULT_CHUNK
-      assembled << event.body.decoded
-      last_seq = event.seq
-
-    when Arcp::Job::EventKind::STATUS
-      if event.body.phase == 'connected'
-        # Stash the resume token from the welcome payload
-        resume_token = client.session.resume_token
-        break  # simulate drop after first few chunks
-      end
-    end
-  end
-end
-
-# Second connection — resume from where we left off
-second_transport = build_transport(
-  resume_token:  resume_token,
-  last_event_seq: last_seq
-)
-
-Arcp::Client.connect(transport: second_transport) do |client|
-  handle = client.reattach_job(handle.job_id)
+  job_id = handle.job_id
 
   handle.subscribe(client: client).each do |event|
     next unless event.kind == Arcp::Job::EventKind::RESULT_CHUNK
 
     assembled << event.body.decoded
-    break unless event.body.more
+    break if assembled.length >= 2
+  end
+ensure
+  client&.close
+end
+
+# Second connection — replay the buffered history
+client = nil
+begin
+  client = Arcp::Client.open(
+    transport: second_transport,
+    auth: { 'scheme' => 'bearer', 'token' => ENV.fetch('ARCP_TOKEN') }
+  )
+  client.subscribe_job(job_id: job_id, history: true, from_event_seq: 0).each do |event|
+    next unless event.kind == Arcp::Job::EventKind::RESULT_CHUNK
+
+    assembled << event.body.decoded
   end
 
-  handle.get_result(client: client)
+  client.get_result(job_id: job_id)
+ensure
+  client&.close
 end
 
 full_text = assembled.join

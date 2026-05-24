@@ -87,9 +87,11 @@ Arcp::Session::Feature::COST_BUDGET       # 'cost.budget'
 Arcp::Session::Feature::PROGRESS          # 'progress'
 Arcp::Session::Feature::RESULT_CHUNK      # 'result_chunk'
 Arcp::Session::Feature::AGENT_VERSIONS    # 'agent_versions'
+Arcp::Session::Feature::MODEL_USE         # 'model.use'
+Arcp::Session::Feature::PROVISIONED_CREDENTIALS # 'provisioned_credentials'
 ```
 
-`Arcp::Session::Feature::ALL` is a frozen Array of all nine.
+`Arcp::Session::Feature::ALL` is a frozen Array of all eleven.
 
 ### CapabilitySet
 

@@ -27,7 +27,7 @@ ARCP itself is a transport-agnostic wire protocol for long-running AI agent jobs
 
 ## Installation
 
-Requires Ruby 3.3 or later. The gem runs on the `socketry/async` reactor and pulls in `async-websocket` for the default networked transport and `sqlite3` for the resume log; no separate extras are needed. Add it to a `Gemfile`:
+Requires Ruby 3.3 or later. The gem runs on the `socketry/async` reactor and pulls in `async-websocket` for the default networked transport. The runtime currently buffers events in memory for replay; durable persistence is not shipped yet. Add it to a `Gemfile`:
 
 ```ruby
 gem 'arcp', '~> 1.0'
@@ -83,7 +83,7 @@ This is the whole shape of the SDK: open a session, submit work, consume an orde
 
 ARCP organizes everything around four concerns — **identity**, **durability**, **authority**, and **observability** — expressed through five core objects:
 
-- **Session** — a connection between a client and a runtime. A session carries identity (a bearer token), negotiates a feature set in a `hello`/`welcome` handshake, and is *resumable*: if the transport drops, you reconnect with a resume token and the runtime replays buffered events. Jobs outlive the session that started them. See [§6](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
+- **Session** — a connection between a client and a runtime. A session carries identity (a bearer token), negotiates a feature set in a `hello`/`welcome` handshake, and keeps a replay window in the runtime's in-memory event log. Transparent reconnect resume is not wired through yet; use `history: true` and `from_event_seq` when you need to replay events. Jobs outlive the session that started them. See [§6](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Job** — one unit of agent work submitted into a session. A job has an identity, an optional idempotency key, a resolved agent version, and a lifecycle that ends in exactly one terminal state: `success`, `error`, `cancelled`, or `timed_out`. See [§7](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Event** — the ordered, session-scoped stream a job emits: logs, thoughts, tool calls and results, status, metrics, artifact references, progress, and streamed result chunks. Events carry strictly monotonic sequence numbers so the stream survives reconnects gap-free. See [§8](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Lease** — the authority a job runs under, expressed as capability grants (`fs.read`, `fs.write`, `net.fetch`, `tool.call`, `agent.delegate`, `cost.budget`, `model.use`). The runtime enforces the lease at every operation boundary; a job can never act outside it. Leases may carry a budget and an expiry, and may be subset and handed to sub-agents via delegation. See [§9](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
@@ -93,9 +93,9 @@ The SDK models each of these as first-class objects; the rest of this README sho
 
 ## Guides
 
-### Sessions and resume
+### Sessions and replay
 
-Open a session, negotiate features, and reconnect transparently after a transport drop using the resume token — jobs keep running server-side while you're gone.
+Open a session, submit work, and replay buffered events from the retained log window when you need to recover missed history.
 
 ```ruby
 require 'async'
@@ -108,22 +108,15 @@ Sync do
     client_name: 'resumable'
   )
 
-  session_id   = client.session.id
-  resume_token = client.session.resume_token
-  last_seq     = Hash.new(0)
   handle = client.submit_job(agent: 'long-runner')
   handle.subscribe(client: client).each do |event|
-    last_seq[handle.job_id] = event.body.respond_to?(:seq) ? event.body.seq : last_seq[handle.job_id]
+    puts "#{event.kind}: #{event.body.to_h}"
   end
 
-  # ... transport drops ...
-
-  resumed = Arcp::Client.open(
-    transport: new_transport,
-    auth: { 'scheme' => 'bearer', 'token' => ENV.fetch('ARCP_TOKEN') },
-    resume: { 'token' => resume_token, 'last_event_seq' => last_seq }
-  )
-  # The runtime replays every event with event_seq > last_seq, then resumes live streaming.
+  replay = client.subscribe_job(job_id: handle.job_id, from_event_seq: 0, history: true)
+  replay.each do |event|
+    puts "[replay] #{event.kind}"
+  end
 end
 ```
 
@@ -277,7 +270,7 @@ Full API reference — every type, method, and event payload — is in [`docs/`]
 
 ## Versioning and compatibility
 
-This SDK speaks **ARCP v1.1 (draft)**. The SDK follows semantic versioning independently of the protocol; the protocol version it negotiates is shown above and in `session.hello`. A runtime advertising a different ARCP MAJOR is not guaranteed compatible. Feature mismatches degrade gracefully: the effective feature set is the intersection of what the client and runtime advertise, and the SDK will not use a feature outside it.
+This SDK speaks **ARCP v1.1 (draft)**. The SDK follows semantic versioning independently of the protocol; the negotiated runtime version is available on `client.session.runtime_version`. A runtime advertising a different ARCP MAJOR is not guaranteed compatible. Feature mismatches degrade gracefully: the effective feature set is the intersection of what the client and runtime advertise, and the SDK will not use a feature outside it.
 
 ## Contributing
 

@@ -3,10 +3,9 @@
 module Arcp
   module Runtime
     # In-memory ring of buffered events keyed by session_id. The runtime
-    # uses this for the resume window and `session.ack`-driven early
-    # eviction. A SQLite-backed variant (same API) is suitable for
-    # multi-process runtimes; for v1 we ship the in-memory implementation
-    # used by tests and the Falcon-hosted single-process runtime.
+    # uses this for the replay window and `session.ack`-driven early
+    # eviction. The shipped implementation is in-memory; persistence can
+    # be layered on later without changing the public API.
     class EventLog
       def initialize(window_sec: 300, clock: Arcp::SystemClock.new)
         @window_sec = window_sec

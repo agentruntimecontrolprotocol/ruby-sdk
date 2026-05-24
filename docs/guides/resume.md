@@ -8,67 +8,65 @@ spec_sections: [§6.3, §6.4]
 
 # Resume
 
-After a transport drop, a client may reconnect and continue receiving
-events for in-flight jobs. The mechanism is two pieces of state on
-`session.welcome`: a `resume_token` and a `resume_window_sec`.
+The Ruby SDK exposes `resume_token` and `resume_window_sec` on
+`session.welcome`, but it does not yet use the `resume:` reconnect
+payload to transparently restore a dropped session. What is shipped
+today is an in-memory replay window for job events and subscription
+history.
 
-## Resume token
+## Replay retained events
+
+When you need missed history, open a fresh session and subscribe with
+`history: true`. Use `from_event_seq: 0` for a full replay of the
+retained window.
 
 ```ruby
 client = Arcp::Client.open(transport: transport, auth: auth)
-token  = client.session.resume_token
-window = client.session.resume_window_sec
-```
+handle = client.submit_job(agent: 'long-runner')
 
-Save `token` somewhere durable across reconnects. The runtime guarantees
-the resume window for that token.
-
-## Reconnect with last_event_seq
-
-```ruby
-new_client = Arcp::Client.open(
-  transport: new_transport,
-  auth:      auth,
-  resume:    {
-    'token'         => token,
-    'last_event_seq' => { job_id => last_seq }
-  }
+replay = client.subscribe_job(
+  job_id: handle.job_id,
+  history: true,
+  from_event_seq: 0
 )
+
+replay.each do |event|
+  puts "#{event.kind}: #{event.body.to_h}"
+end
 ```
 
-The runtime replays every job-event with `event_seq > last_seq` from
-its event log, then resumes live tailing.
+## Retention window
 
-## Resume window expiry
-
-If `resume_window_sec` has elapsed since the prior session closed, the
-runtime responds with `session.error` code `RESUME_WINDOW_EXPIRED`. The
-client raises `Arcp::Errors::ResumeWindowExpired` from `Client.open`.
-Recover by opening a fresh session and re-subscribing with `history: true`.
-
-## Heartbeats and reconnect
-
-`session.ping` / `session.pong` keep idle connections alive and surface
-half-open TCP states. The runtime advertises a `heartbeat_interval_sec`
-on welcome; the client schedules a ping at that cadence.
+The runtime keeps buffered events in memory for the configured
+`resume_window_sec` period and evicts older entries from the replay log.
+If that window elapses before you subscribe, the older events are no
+longer recoverable.
 
 ```ruby
 runtime = Arcp::Runtime::Runtime.new(
   auth_verifier:          verifier,
-  heartbeat_interval_sec: 30  # nil to disable
+  heartbeat_interval_sec: 30,  # nil to disable
+  resume_window_sec:      300
 )
-client = Arcp::Client.open(transport: t, auth: auth)
-client.session.heartbeat_interval_sec # => 30
+
+client.session.resume_token
+client.session.resume_window_sec
 ```
+
+## Heartbeats
+
+`session.ping` / `session.pong` keep idle connections alive and surface
+half-open TCP states. The runtime advertises a
+`heartbeat_interval_sec` on welcome; the client schedules a ping at that
+cadence.
 
 If a peer detects N consecutive missed heartbeats it MAY close the
 transport and raise `Arcp::Errors::HeartbeatLost` (`retryable? == true`).
 
 A lost heartbeat MUST NOT terminate running jobs at the runtime. Job
-state persists in the event log within the resume window; reconnecting
-clients can resume via `resume_token` and `from_event_seq`.
+state persists in the event log within the replay window.
 
 ## See also
 
 - `guides/sessions.md`
-- `guides/jobs.md`
+- `guides/job-events.md`

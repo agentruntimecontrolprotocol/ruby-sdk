@@ -32,6 +32,18 @@ module Arcp
   class Client
     attr_reader :session, :transport
 
+    # Opens a client, performs the initial handshake, and returns a ready
+    # instance.
+    #
+    # @param transport [Arcp::Transport::Base] the transport to attach to.
+    # @param auth [Hash] the session auth payload.
+    # @param client_name [String] the advertised client name.
+    # @param client_version [String] the advertised client version.
+    # @param capabilities [Arcp::Session::CapabilitySet, nil] the optional
+    #   local capability set to intersect with the runtime's.
+    # @param resume [Hash, nil] the optional resume payload.
+    # @param clock [Arcp::Clock] the clock used for timestamps and heartbeats.
+    # @return [Arcp::Client]
     def self.open(transport:, auth:, client_name: 'arcp-ruby', client_version: Arcp::VERSION,
                   capabilities: nil, resume: nil, clock: Arcp::SystemClock.new)
       client = new(transport: transport, clock: clock)
@@ -57,6 +69,7 @@ module Arcp
       @mutex = Mutex.new
     end
 
+    # Performs the session handshake and populates {#session}.
     def handshake!(auth:, client_name:, client_version:, capabilities: nil, resume: nil)
       caps = capabilities || Arcp::Session::CapabilitySet.local
       session_id = Arcp::Ids.session_id
@@ -101,6 +114,7 @@ module Arcp
       @session
     end
 
+    # Lists jobs visible to the current principal.
     def list_jobs(status: nil, agent: nil, created_after: nil, limit: nil, cursor: nil)
       require_feature!(Arcp::Session::Feature::LIST_JOBS)
 
@@ -123,6 +137,7 @@ module Arcp
       end.lazy
     end
 
+    # Submits a job and returns the accepted handle.
     def submit_job(agent:, input: nil, lease_request: nil, lease_constraints: nil,
                    idempotency_key: nil, max_runtime_sec: nil)
       lease_constraints&.validate!
@@ -146,6 +161,7 @@ module Arcp
       )
     end
 
+    # Subscribes to a job's event stream.
     def subscribe_job(job_id:, from_event_seq: nil, history: false)
       queue = @mutex.synchronize { @job_streams[job_id] ||= Async::Queue.new }
 
@@ -166,12 +182,14 @@ module Arcp
       end
     end
 
+    # Cancels a job owned by the current session.
     def cancel_job(job_id:, reason: nil)
       send_envelope(type: Arcp::MessageTypes::JOB_CANCEL,
                     job_id: job_id,
                     payload: Arcp::Job::Cancel.new(job_id: job_id, reason: reason).to_h)
     end
 
+    # Waits for the terminal result or raises the mapped job error.
     def get_result(job_id:)
       env = @mutex.synchronize { @job_results[job_id] }
       if env.nil?
@@ -189,12 +207,14 @@ module Arcp
       end
     end
 
+    # Sends a `session.ack` for the last processed sequence.
     def ack(seq)
       require_feature!(Arcp::Session::Feature::ACK)
       send_envelope(type: Arcp::MessageTypes::SESSION_ACK,
                     payload: Arcp::Session::Ack.new(last_processed_seq: seq).to_h)
     end
 
+    # Sends an envelope on the current session.
     def send_envelope(type:, payload:, job_id: nil)
       raise Arcp::Errors::Internal, 'session not open' unless @session
       raise IOError, 'client closed' if @closed
@@ -208,6 +228,7 @@ module Arcp
       env
     end
 
+    # Closes the session and drains any pending queues.
     def close(reason: nil)
       return if @closed
 
