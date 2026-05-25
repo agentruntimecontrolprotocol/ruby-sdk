@@ -21,6 +21,7 @@ module Arcp
       payload
     end
 
+    # @api private
     def self.default_message = name.split('::').last.gsub(/([a-z])([A-Z])/, '\1 \2').downcase
   end
 

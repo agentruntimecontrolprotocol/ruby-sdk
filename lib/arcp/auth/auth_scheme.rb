@@ -2,6 +2,7 @@
 
 module Arcp
   module Auth
+    # Authenticated principal returned by an `AuthScheme`.
     Principal = Data.define(:id, :name, :scopes)
 
     # AuthScheme is an interface: implementations expose

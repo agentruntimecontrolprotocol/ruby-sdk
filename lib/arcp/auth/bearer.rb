@@ -3,15 +3,18 @@
 module Arcp
   module Auth
     # Static-token bearer verifier. Maps token strings to Principals.
+    #
     # For production, plug a custom verifier implementing
     # `#verify(token) -> Principal | nil`.
     class Bearer
       include AuthScheme
 
+      # Build a bearer verifier from a token-to-principal map.
       def initialize(tokens: {})
         @tokens = tokens.dup.freeze
       end
 
+      # Verify a bearer token and return the associated principal.
       def verify(token)
         return nil if token.nil?
 
@@ -30,6 +33,7 @@ module Arcp
         end
       end
 
+      # Convenience constructor for a single accepted token.
       def self.from_token(token, principal_id: 'anonymous', scopes: [])
         new(tokens: { token => Principal.new(id: principal_id, name: principal_id, scopes: scopes.freeze) })
       end

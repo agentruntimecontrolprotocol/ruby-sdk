@@ -76,6 +76,7 @@ module Arcp
       from_h(Arcp::Serializer.load(bytes))
     end
 
+    # @api private
     def self.deep_freeze(value)
       case value
       when Hash
@@ -97,6 +98,7 @@ module Arcp
 
     def to_json(*_args) = Arcp::Serializer.dump(to_h)
 
+    # @api private
     def stringify(value)
       case value
       when Hash  then value.transform_keys(&:to_s).transform_values { |v| stringify(v) }
@@ -108,6 +110,7 @@ module Arcp
     def known? = Arcp::MessageTypes.known?(type)
   end
 
+  # @api private
   UnknownEnvelope = Data.define(:envelope) do
     def type = envelope.type
     def payload = envelope.payload
