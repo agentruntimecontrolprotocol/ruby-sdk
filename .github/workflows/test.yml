@@ -61,6 +61,18 @@ jobs:
       - name: RSpec
         run: bundle exec rake spec
 
+      # SimpleCov emits coverage/lcov.info for Codecov. Upload from the latest
+      # Ruby matrix entry only; coverage should not differ by patch runtime.
+      - name: Upload coverage to Codecov
+        if: matrix.ruby == '3.5'
+        # codecov/codecov-action v6.0.1
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          fail_ci_if_error: false
+          flags: unittests
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Upload test artifacts
         if: failure()
         # actions/upload-artifact v4.4.3
