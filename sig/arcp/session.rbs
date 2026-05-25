@@ -10,6 +10,8 @@ module Arcp
       PROGRESS: String
       RESULT_CHUNK: String
       AGENT_VERSIONS: String
+      MODEL_USE: String
+      PROVISIONED_CREDENTIALS: String
       ALL: Array[String]
     end
 
@@ -51,6 +53,27 @@ module Arcp
       attr_reader resume_token: String?
       attr_reader resume_window_sec: Integer?
       def supports?: (String) -> bool
+    end
+
+    class JobsResponse
+      attr_reader jobs: Array[Hash[String, untyped]]
+      attr_reader next_cursor: String?
+      def self.from_h: (Hash[String | Symbol, untyped]) -> JobsResponse
+      def to_h: () -> Hash[String, untyped]
+    end
+
+    class Bye
+      attr_reader reason: String?
+      def to_h: () -> Hash[String, untyped]
+    end
+
+    class SessionError
+      attr_reader code: String
+      attr_reader message: String?
+      attr_reader retryable: bool
+      attr_reader details: Hash[String, untyped]
+      def self.from_h: (Hash[String | Symbol, untyped]) -> SessionError
+      def to_h: () -> Hash[String, untyped]
     end
   end
 end

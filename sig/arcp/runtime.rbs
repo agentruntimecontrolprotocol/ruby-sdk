@@ -11,6 +11,7 @@ module Arcp
       attr_reader lease_manager: LeaseManager
       attr_reader subscription_manager: SubscriptionManager
       attr_reader event_log: EventLog
+      attr_reader resume_registry: ResumeRegistry
       attr_reader credential_registry: CredentialRegistry?
       attr_reader enforce_model_use: bool
 
@@ -18,24 +19,116 @@ module Arcp
       def register_agent: (name: String, versions: Array[String], default: String, handler: ^(JobContext) -> void) -> void
       def local_capabilities: (?agents_inventory: bool) -> Arcp::Session::CapabilitySet
       def accept: (Arcp::Transport::Base) -> untyped
+      def register_session: (String, SessionActor) -> untyped
+      def deregister_session: (String) -> untyped
+      def session: (String) -> SessionActor?
       def shutdown: (?reason: String?) -> void
     end
 
-    class JobManager end
-    class LeaseManager
-      def check_model!: (String, model_id: String) -> bool
+    class JobManager
+      attr_reader runtime: Runtime
+      def register_agent: (name: String, versions: Array[String], default: String, handler: ^(JobContext) -> void) -> untyped
+      def agent_inventory: () -> Arcp::Session::AgentInventory
+      def resolve_agent: (String) -> Array[untyped]
+      def submit: (submit: untyped, principal_id: String, session_id: String, session_actor: SessionActor) -> untyped
+      def cancel: (job_id: String, principal_id: String, ?reason: String?) -> untyped
+      def list: (principal_id: String, ?filter: Hash[String, untyped], ?limit: Integer, ?cursor: String?) -> Arcp::Session::JobsResponse
+      def lookup: (String) -> untyped
+      def publish_event: (String, Arcp::Job::Event) -> Integer
+      def publish_result: (String, Arcp::Job::Result) -> untyped
+      def publish_error: (String, Arcp::Job::JobError) -> untyped
     end
+
+    class LeaseManager
+      def initialize: (?clock: untyped, ?enforce_model_use: bool) -> void
+      def register: (String, Arcp::Lease::Lease) -> Arcp::Lease::Lease
+      def get: (String) -> Arcp::Lease::Lease?
+      def counter: (String) -> Arcp::Lease::BudgetCounter?
+      def check!: (String, capability: String) -> untyped
+      def check_model!: (String, model_id: String) -> bool
+      def try_spend!: (String, String, BigDecimal) -> bool
+      def remaining: (String) -> Hash[String, untyped]
+      def revoke: (String) -> untyped
+    end
+
     class CredentialRegistry
       def issue_for: (job_id: String, lease: Arcp::Lease::Lease?, agent: String, principal_id: String) -> Array[Arcp::Credential]
       def rotate: (job_id: String, credential_id: String, new_value: String) -> String
       def revoke_all: (job_id: String) -> Integer
       def reconcile_on_startup!: () -> void
     end
-    class SubscriptionManager end
-    class EventLog end
-    class JobContext
-      def rotate_credential: (id: String, new_value: String) -> untyped
+
+    class SubscriptionManager
+      def initialize: () -> void
+      def register_owner: (String, String, String, untyped) -> untyped
+      def attach: (String, String, String, untyped) -> untyped
+      def detach: (String, String) -> untyped
+      def fanout: (String, Arcp::Envelope) -> untyped
+      def owner_of: (String) -> String?
+      def clear: (String) -> untyped
+      def rebind_session: (String, untyped) -> untyped
     end
-    class SessionActor end
+
+    class EventLog
+      def initialize: (?window_sec: Integer, ?clock: untyped) -> void
+      def append: (String, Arcp::Envelope) -> Arcp::Envelope
+      def floor: (String) -> Integer
+      def evict_up_to: (String, Integer) -> untyped
+      def replay: (String, ?from_event_seq: Integer?) -> Array[Arcp::Envelope]
+      def replay_job: (String, ?from_event_seq: Integer?) -> Array[Arcp::Envelope]
+      def expire!: () -> untyped
+      def buffer_size: (String) -> Integer
+      def job_buffer_size: (String) -> Integer
+    end
+
+    class ResumeRegistry
+      class Entry
+        attr_accessor session_id: String
+        attr_accessor principal_id: String
+        attr_accessor token: String
+        attr_accessor registered_monotonic: Float
+        attr_accessor disconnected_monotonic: Float?
+        attr_accessor window_sec: Integer
+        attr_accessor last_processed_seq: Integer
+      end
+
+      def initialize: (?window_sec: Integer, ?clock: untyped) -> void
+      def register: (token: String, session_id: String, principal_id: String, ?last_processed_seq: Integer) -> Entry
+      def mark_disconnected: (String, ?last_processed_seq: Integer?) -> untyped
+      def mark_reconnected: (String) -> untyped
+      def forget: (String) -> untyped
+      def lookup: (String) -> Entry?
+      def expire!: () -> untyped
+      def size: () -> Integer
+    end
+
+    class JobContext
+      attr_reader job_id: String
+      attr_reader agent: String
+      attr_reader input: untyped
+      attr_reader lease: Arcp::Lease::Lease?
+      attr_reader event_seq: Integer
+      def emit: (kind: String, body: untyped) -> Arcp::Job::Event
+      def log: (level: String, message: String, **untyped) -> Arcp::Job::Event
+      def progress: (current: untyped, ?total: untyped?, ?units: String?, ?message: String?) -> Arcp::Job::Event
+      def metric: (name: String, value: untyped, ?unit: String?) -> Arcp::Job::Event
+      def status: (phase: String, ?message: String?, ?fields: Hash[String, untyped]) -> Arcp::Job::Event
+      def rotate_credential: (id: String, new_value: String) -> untyped
+      def tool_call: (call_id: String, tool: String, args: untyped) -> Arcp::Job::Event
+      def tool_result: (call_id: String, ?result: untyped?, ?error: untyped?) -> Arcp::Job::Event
+      def stream_result: (?encoding: String) ?{ (untyped) -> void } -> untyped
+      def record_chunk_totals: (Hash[Symbol, untyped]) -> untyped
+      def finish: (?result: untyped?) -> untyped
+      def fail!: (code: String, ?message: String?, ?retryable: bool, ?details: Hash[String, untyped]) -> untyped
+    end
+
+    class SessionActor
+      attr_reader session_id: String?
+      attr_reader principal: untyped
+      attr_reader outbox: untyped
+      def initialize: (runtime: Runtime, transport: Arcp::Transport::Base) -> void
+      def run: () -> untyped
+      def send_envelope: (Arcp::Envelope) -> untyped
+    end
   end
 end

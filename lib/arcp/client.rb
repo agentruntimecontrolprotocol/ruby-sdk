@@ -61,6 +61,7 @@ module Arcp
       @job_streams = {}
       @job_results = {}
       @result_waiters = {}
+      @submitted_jobs = {}
       @reader_task = nil
       @heartbeat_task = nil
       @next_outbound_seq = 0
@@ -153,6 +154,7 @@ module Arcp
         payload: submit.to_h
       )
       accepted = Arcp::Job::Accepted.from_h(accepted_env.payload)
+      @mutex.synchronize { @submitted_jobs[accepted.job_id] = true }
       Arcp::Job::Handle.new(
         job_id: accepted.job_id, agent: accepted.agent,
         submitted_at: accepted.accepted_at,
@@ -161,11 +163,17 @@ module Arcp
       )
     end
 
-    # Subscribes to a job's event stream.
+    # Subscribes to a job's event stream. Sends `job.subscribe` for any job
+    # this client did not submit (so observer sessions attach to the runtime
+    # fanout); submitter sessions reuse the stream the runtime opened for
+    # them at submit time. The `subscribe` feature is required for explicit
+    # subscriptions regardless of whether `from_event_seq` is supplied.
     def subscribe_job(job_id:, from_event_seq: nil, history: false)
+      already_owned = @mutex.synchronize { @submitted_jobs[job_id] }
       queue = @mutex.synchronize { @job_streams[job_id] ||= Async::Queue.new }
 
-      if @session.supports?(Arcp::Session::Feature::SUBSCRIBE) && from_event_seq
+      unless already_owned
+        require_feature!(Arcp::Session::Feature::SUBSCRIBE)
         send_envelope(type: Arcp::MessageTypes::JOB_SUBSCRIBE,
                       job_id: job_id,
                       payload: Arcp::Job::Subscribe.new(job_id: job_id, from_event_seq: from_event_seq,
@@ -197,6 +205,8 @@ module Arcp
         @mutex.synchronize { @result_waiters[job_id] = queue }
         env = queue.dequeue
       end
+      raise Arcp::Errors::ProtocolViolation, 'transport closed before job result' if env.nil?
+
       case env.type
       when Arcp::MessageTypes::JOB_RESULT
         Arcp::Job::Result.from_h(env.payload)
@@ -214,16 +224,32 @@ module Arcp
                     payload: Arcp::Session::Ack.new(last_processed_seq: seq).to_h)
     end
 
-    # Sends an envelope on the current session.
-    def send_envelope(type:, payload:, job_id: nil)
+    # Builds an envelope for the current session without sending it.
+    # Lets callers register pending waiters keyed on the envelope id
+    # before the peer can reply.
+    def build_envelope(type:, payload:, job_id: nil)
       raise Arcp::Errors::Internal, 'session not open' unless @session
-      raise IOError, 'client closed' if @closed
 
-      env = Arcp::Envelope.build(
+      Arcp::Envelope.build(
         type: type, session_id: @session.id,
         trace_id: Arcp::Trace.current.trace_id,
         job_id: job_id, payload: payload
       )
+    end
+
+    # Sends an envelope on the current session.
+    def send_envelope(type:, payload:, job_id: nil)
+      raise IOError, 'client closed' if @closed
+
+      env = build_envelope(type: type, payload: payload, job_id: job_id)
+      @transport.send(env)
+      env
+    end
+
+    # Sends a pre-built envelope, e.g. after registering a pending waiter.
+    def send_built_envelope(env)
+      raise IOError, 'client closed' if @closed
+
       @transport.send(env)
       env
     end
@@ -232,13 +258,13 @@ module Arcp
     def close(reason: nil)
       return if @closed
 
-      @closed = true
       begin
         send_envelope(type: Arcp::MessageTypes::SESSION_BYE,
                       payload: Arcp::Session::Bye.new(reason: reason).to_h)
       rescue StandardError
         nil
       end
+      @closed = true
       @heartbeat_task&.stop
       @reader_task&.stop
       @transport.close(reason: reason)
@@ -255,9 +281,15 @@ module Arcp
     end
 
     def request(type:, expect:, payload:)
-      env = send_envelope(type: type, payload: payload)
+      env = build_envelope(type: type, payload: payload)
       queue = Async::Queue.new
       @mutex.synchronize { @pending[env.id] = [expect, queue] }
+      begin
+        send_built_envelope(env)
+      rescue StandardError
+        @mutex.synchronize { @pending.delete(env.id) }
+        raise
+      end
       response = queue.dequeue
       raise Arcp::Errors::ProtocolViolation, 'transport closed' if response.nil?
 
@@ -348,14 +380,9 @@ module Arcp
 
     def feed_pending(env)
       reply_to = env.payload.is_a?(Hash) ? env.payload['reply_to'] : nil
-      key = reply_to || @mutex.synchronize do
-        @pending.keys.find do |k|
-          @pending[k].is_a?(Array) && @pending[k][0] == env.type
-        end
-      end
-      return unless key
+      return unless reply_to
 
-      pair = @mutex.synchronize { @pending.delete(key) }
+      pair = @mutex.synchronize { @pending.delete(reply_to) }
       pair&.last&.enqueue(env)
     end
 
