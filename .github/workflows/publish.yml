@@ -12,10 +12,11 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   publish:
-    name: Publish to RubyGems
+    name: Publish gem
     runs-on: ubuntu-latest
     environment: rubygems
     steps:
@@ -32,6 +33,16 @@ jobs:
 
       - name: Build gem
         run: gem build arcp.gemspec
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.gem
+          printf -- "---\n:github: Bearer %s\n" "$GITHUB_TOKEN" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push --key github --host https://rubygems.pkg.github.com/agentruntimecontrolprotocol arcp-*.gem
+          rm -f ~/.gem/credentials
 
       - name: Publish to RubyGems
         env:

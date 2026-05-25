@@ -15,14 +15,15 @@ Gem::Specification.new do |spec|
     replay, capability negotiation, leases with budget and expiration, streamed
     results, and OpenTelemetry trace propagation. Built on socketry/async.
   DESC
-  spec.homepage    = 'https://github.com/nficano/arpc'
+  spec.homepage    = 'https://github.com/agentruntimecontrolprotocol/ruby-sdk'
   spec.license     = 'Apache-2.0'
 
   spec.required_ruby_version = '>= 3.3.0'
 
-  spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/ruby-sdk/CHANGELOG.md"
-  spec.metadata['source_code_uri']       = 'https://github.com/nficano/arpc.git'
+  spec.metadata['changelog_uri']         = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata['source_code_uri']       = "#{spec.homepage}.git"
   spec.metadata['bug_tracker_uri']       = "#{spec.homepage}/issues"
+  spec.metadata['github_repo']           = 'ssh://github.com/agentruntimecontrolprotocol/ruby-sdk'
 
   spec.files = Dir[
     'lib/**/*.rb',

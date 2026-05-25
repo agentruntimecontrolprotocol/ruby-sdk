@@ -131,11 +131,13 @@ the changelog. Prefer clarity over cleverness in a library others build on.
 ## Releases
 
 Releases are cut by maintainers. The gem is published to
-[RubyGems.org](https://rubygems.org/gems/arcp); pushing a `v*` tag triggers the
-`publish` GitHub Actions workflow, which builds `arcp.gemspec` and runs
-`gem push`. The SDK is versioned with semantic versioning independently of the
-protocol version it speaks; a protocol version bump is noted in the changelog
-when the negotiated ARCP version changes.
+[RubyGems.org](https://rubygems.org/gems/arcp) and GitHub Packages; pushing a
+`v*` tag triggers the `publish` GitHub Actions workflow, which builds
+`arcp.gemspec`, publishes the gem to GitHub Packages under the
+`agentruntimecontrolprotocol` namespace, and then runs `gem push` for RubyGems.
+The SDK is versioned with semantic versioning independently of the protocol
+version it speaks; a protocol version bump is noted in the changelog when the
+negotiated ARCP version changes.
 
 ## License
 
