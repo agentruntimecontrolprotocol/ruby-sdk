@@ -80,6 +80,7 @@ Naming/MethodParameterName:
     - h
     - id
     - kw
+    - s
     - t
 
 # Integration specs are organized by protocol scenario first, not by a single
@@ -114,6 +115,8 @@ RSpec/DescribeClass:
   Exclude:
     - 'spec/integration/**/*'
     - 'spec/e2e/**/*'
+    - 'spec/unit/coverage_spec.rb'
+    - 'spec/unit/coverage_extras_spec.rb'
 
 # Specs are grouped by test layer (`unit`, `integration`, `e2e`) instead of
 # mirroring the source tree exactly.

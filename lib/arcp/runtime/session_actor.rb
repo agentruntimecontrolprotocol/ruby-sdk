@@ -52,17 +52,44 @@ module Arcp
         end
 
         hello = Arcp::Session::Hello.from_h(envelope.payload)
+        authenticate!(hello, envelope)
+        @capabilities = hello.capabilities.intersect(@runtime.local_capabilities(agents_inventory: true))
+        replay_envelopes = bind_session(hello, envelope)
+
+        send_welcome
+        @runtime.register_session(@session_id, self)
+        replay_envelopes.each { |e| send_envelope(e) }
+      rescue Arcp::Error
+        raise
+      rescue StandardError => e
+        send_session_error(envelope&.session_id || Arcp::Ids.session_id,
+                           code: 'INTERNAL_ERROR', message: e.message)
+        raise
+      end
+
+      def authenticate!(hello, envelope)
         token = hello.auth.is_a?(Hash) ? (hello.auth['token'] || hello.auth[:token]) : nil
         @principal = @runtime.auth_verifier.verify(token)
-        if @principal.nil?
-          send_session_error(envelope.session_id, code: 'UNAUTHENTICATED', message: 'invalid bearer token')
-          raise Arcp::Errors::Unauthenticated, 'invalid bearer token'
-        end
+        return unless @principal.nil?
+
+        send_session_error(envelope.session_id, code: 'UNAUTHENTICATED', message: 'invalid bearer token')
+        raise Arcp::Errors::Unauthenticated, 'invalid bearer token'
+      end
+
+      def bind_session(hello, envelope)
+        resume_payload = normalize_resume(hello.resume)
+        return perform_resume(resume_payload, envelope: envelope) if resume_payload
 
         @session_id = envelope.session_id
-        @capabilities = hello.capabilities.intersect(@runtime.local_capabilities(agents_inventory: true))
         @resume_token = Arcp::Ids.resume_token
+        @runtime.resume_registry.register(
+          token: @resume_token, session_id: @session_id,
+          principal_id: @principal.id, last_processed_seq: 0
+        )
+        []
+      end
 
+      def send_welcome
         welcome = Arcp::Session::Welcome.new(
           runtime_name: @runtime.name,
           runtime_version: @runtime.version,
@@ -77,13 +104,43 @@ module Arcp
           payload: welcome.to_h
         )
         @transport.send(out)
-        @runtime.register_session(@session_id, self)
-      rescue Arcp::Error
-        raise
-      rescue StandardError => e
-        send_session_error(envelope&.session_id || Arcp::Ids.session_id,
-                           code: 'INTERNAL_ERROR', message: e.message)
-        raise
+      end
+
+      def normalize_resume(resume)
+        return nil if resume.nil?
+
+        h = resume.is_a?(Hash) ? resume.transform_keys(&:to_s) : {}
+        token = h['token']
+        return nil if token.nil? || token.to_s.empty?
+
+        { 'token' => token, 'last_event_seq' => h['last_event_seq'] }
+      end
+
+      def perform_resume(resume_payload, envelope:)
+        token = resume_payload['token']
+        entry = @runtime.resume_registry.lookup(token)
+        if entry.nil?
+          send_session_error(envelope.session_id,
+                             code: 'RESUME_WINDOW_EXPIRED',
+                             message: 'resume token unknown or expired')
+          raise Arcp::Errors::ResumeWindowExpired, 'resume token unknown or expired'
+        end
+
+        unless entry.principal_id == @principal.id
+          send_session_error(envelope.session_id,
+                             code: 'UNAUTHENTICATED',
+                             message: 'resume token does not match authenticated principal')
+          raise Arcp::Errors::Unauthenticated, 'resume token does not match authenticated principal'
+        end
+
+        @session_id = entry.session_id
+        @resume_token = token
+        last_processed_seq = resume_payload['last_event_seq'] || entry.last_processed_seq || 0
+        @last_processed_seq = last_processed_seq
+        @runtime.resume_registry.mark_reconnected(token)
+        @runtime.subscription_manager.rebind_session(@session_id, @outbox)
+        # Replay every envelope with event_seq > last_processed_seq.
+        @runtime.event_log.replay(@session_id, from_event_seq: last_processed_seq + 1)
       end
 
       def send_session_error(session_id, code:, message:)
@@ -238,7 +295,7 @@ module Arcp
         @runtime.subscription_manager.attach(sub.job_id, @principal.id, @session_id, @outbox)
 
         if sub.history
-          replay = @runtime.event_log.replay(@session_id, from_event_seq: sub.from_event_seq)
+          replay = @runtime.event_log.replay_job(sub.job_id, from_event_seq: sub.from_event_seq)
           replay.each { |e| send_envelope(e) }
         end
 
@@ -294,6 +351,11 @@ module Arcp
         @outbox.enqueue(:__arcp_close__)
         @transport.close
         @runtime.deregister_session(@session_id) if @session_id
+        return unless @resume_token
+
+        @runtime.resume_registry.mark_disconnected(
+          @resume_token, last_processed_seq: @last_processed_seq
+        )
       end
     end
   end

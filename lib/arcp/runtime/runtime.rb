@@ -11,6 +11,7 @@ require_relative '../auth'
 require_relative '../clock'
 require_relative '../message_types'
 require_relative 'credential_registry'
+require_relative 'resume_registry'
 
 module Arcp
   module Runtime
@@ -22,7 +23,8 @@ module Arcp
       attr_reader :auth_verifier, :clock, :name, :version,
                   :heartbeat_interval_sec, :resume_window_sec,
                   :job_manager, :lease_manager, :subscription_manager,
-                  :event_log, :credential_registry, :enforce_model_use
+                  :event_log, :credential_registry, :enforce_model_use,
+                  :resume_registry
 
       # Builds a runtime with the supplied auth, transport, and lifecycle
       # configuration.
@@ -50,6 +52,7 @@ module Arcp
         )
 
         @event_log = EventLog.new(window_sec: resume_window_sec, clock: clock)
+        @resume_registry = ResumeRegistry.new(window_sec: resume_window_sec, clock: clock)
         @lease_manager = LeaseManager.new(clock: clock, enforce_model_use: enforce_model_use)
         @subscription_manager = SubscriptionManager.new
         @job_manager = JobManager.new(

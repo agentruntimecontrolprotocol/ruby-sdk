@@ -56,16 +56,23 @@ module Arcp
       end
 
       # Try to decrement the bound budget. Returns true on success, raises
-      # BudgetExhausted if no balance covers the amount. Straight-line —
-      # no scheduler-yielding calls between read and write.
+      # BudgetExhausted if the requested currency is absent from the budget
+      # or has insufficient balance. Jobs with no lease or no budget at all
+      # remain unrestricted. Straight-line — no scheduler-yielding calls
+      # between read and write.
       def try_spend!(job_id, currency, amount)
         counter = self.counter(job_id)
         return true if counter.nil?
-        return true if counter.get(currency).zero? && !counter.remaining.key?(currency)
+        return true if counter.remaining.empty?
 
         unless counter.try_decrement(currency, amount)
+          message = if counter.remaining.key?(currency)
+                      "budget #{currency} exhausted"
+                    else
+                      "currency #{currency} not in budget"
+                    end
           raise Arcp::Errors::BudgetExhausted.new(
-            "budget #{currency} exhausted",
+            message,
             details: { 'currency' => currency, 'remaining' => counter.get(currency).to_s('F') }
           )
         end

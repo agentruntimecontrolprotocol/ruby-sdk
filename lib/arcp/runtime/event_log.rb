@@ -2,22 +2,28 @@
 
 module Arcp
   module Runtime
-    # In-memory ring of buffered events keyed by session_id. The runtime
-    # uses this for the replay window and `session.ack`-driven early
-    # eviction. The shipped implementation is in-memory; persistence can
-    # be layered on later without changing the public API.
+    # In-memory ring of buffered events keyed by session_id, with a
+    # secondary index by job_id so that `job.subscribe` history replays
+    # can resolve from the originating job's stream regardless of which
+    # session emitted the envelopes. The runtime uses this for the
+    # replay window and `session.ack`-driven early eviction. The shipped
+    # implementation is in-memory; persistence can be layered on later
+    # without changing the public API.
     class EventLog
       def initialize(window_sec: 300, clock: Arcp::SystemClock.new)
         @window_sec = window_sec
         @clock = clock
         @sessions = Hash.new { |h, k| h[k] = [] }
+        @jobs = Hash.new { |h, k| h[k] = [] }
         @floor = Hash.new(0)
         @mutex = Mutex.new
       end
 
       def append(session_id, envelope)
+        entry = [envelope, @clock.monotonic]
         @mutex.synchronize do
-          @sessions[session_id] << [envelope, @clock.monotonic]
+          @sessions[session_id] << entry
+          @jobs[envelope.job_id] << entry if envelope.job_id
         end
         envelope
       end
@@ -33,11 +39,29 @@ module Arcp
         end
       end
 
+      # Replays buffered envelopes for a session in arrival order. Used
+      # for resume token replay where the session id frames the cursor.
+      # Terminal envelopes (`job.result`, `job.error`) carry no
+      # `event_seq` and are always included so a resuming client can
+      # observe the final job state alongside any missed events.
       def replay(session_id, from_event_seq: nil)
         @mutex.synchronize do
           @sessions[session_id].each_with_object([]) do |(env, _t), out|
-            next if env.event_seq.nil?
-            next if from_event_seq && env.event_seq < from_event_seq
+            next if env.event_seq && from_event_seq && env.event_seq < from_event_seq
+
+            out << env
+          end
+        end
+      end
+
+      # Replays buffered envelopes for a job's stream regardless of which
+      # session originally produced them. Used by `job.subscribe`
+      # history replay so observers see the full job timeline, including
+      # the terminal `job.result` / `job.error` envelope.
+      def replay_job(job_id, from_event_seq: nil)
+        @mutex.synchronize do
+          @jobs[job_id].each_with_object([]) do |(env, _t), out|
+            next if env.event_seq && from_event_seq && env.event_seq < from_event_seq
 
             out << env
           end
@@ -51,11 +75,16 @@ module Arcp
           @sessions.each_value do |buf|
             buf.reject! { |(_e, t)| (now - t) > @window_sec }
           end
+          @jobs.each_value do |buf|
+            buf.reject! { |(_e, t)| (now - t) > @window_sec }
+          end
         end
       end
 
       # @api private
       def buffer_size(session_id) = @sessions[session_id].size
+      # @api private
+      def job_buffer_size(job_id) = @jobs[job_id].size
     end
   end
 end

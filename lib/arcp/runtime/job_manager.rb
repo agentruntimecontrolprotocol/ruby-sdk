@@ -9,7 +9,12 @@ module Arcp
     AgentRegistration = Data.define(:name, :versions, :default, :handler)
 
     JobRecord = Data.define(:job_id, :agent, :principal_id, :status, :created_at,
-                            :input, :submitter_session_id, :task) do
+                            :input, :submitter_session_id, :task, :seq) do
+      def initialize(job_id:, agent:, principal_id:, status:, created_at:,
+                     input:, submitter_session_id:, task:, seq: nil)
+        super
+      end
+
       def with(**kw) = self.class.new(**to_h, **kw)
     end
 
@@ -26,6 +31,8 @@ module Arcp
         @clock = clock
         @agents = {}                    # name => AgentRegistration
         @jobs = {}                      # job_id => JobRecord
+        @order = []                     # insertion order of job_ids (oldest first)
+        @next_seq = 0                   # monotonic counter assigned at submit
         @event_seq = Hash.new(0)        # job_id => last emitted seq
         @idempotency = {}               # [principal, key] => job_id
         @mutex = Mutex.new
@@ -91,13 +98,18 @@ module Arcp
           job_id: job_id, lease: lease, agent: resolved, principal_id: principal_id
         )
 
+        seq = @mutex.synchronize { @next_seq += 1 }
+        # Record the job in `running` state up front so an agent task that
+        # finishes before submit returns cannot have its terminal status
+        # (`succeeded`/`error`) clobbered by a follow-up `running` assignment.
         record = JobRecord.new(
           job_id: job_id, agent: resolved, principal_id: principal_id,
-          status: 'pending', created_at: @clock.now.iso8601,
-          input: submit.input, submitter_session_id: session_id, task: nil
+          status: 'running', created_at: @clock.now.iso8601,
+          input: submit.input, submitter_session_id: session_id, task: nil, seq: seq
         )
         @mutex.synchronize do
           @jobs[job_id] = record
+          @order << job_id
           @idempotency[[principal_id, submit.idempotency_key]] = job_id if submit.idempotency_key
         end
 
@@ -106,7 +118,10 @@ module Arcp
         task = Async do |t|
           run_agent(t, reg, job_id, submit, lease)
         end
-        @mutex.synchronize { @jobs[job_id] = @jobs[job_id].with(task: task, status: 'running') }
+        @mutex.synchronize do
+          existing = @jobs[job_id]
+          @jobs[job_id] = existing.with(task: task) if existing
+        end
 
         [job_id, resolved, lease, credentials]
       end
@@ -130,19 +145,34 @@ module Arcp
       end
 
       def list(principal_id:, filter: {}, limit: 50, cursor: nil)
-        offset = cursor ? cursor.to_i : 0
-        rows = @mutex.synchronize do
-          @jobs.values
-               .select { |r| r.principal_id == principal_id }
-               .select { |r| filter['status'].nil? || filter['status'].include?(r.status) }
-               .select { |r| filter['agent'].nil? || r.agent.start_with?(filter['agent']) }
-               .sort_by(&:created_at)
+        # Walk the insertion-ordered job index instead of re-sorting the
+        # whole table per page. The cursor encodes the monotonic per-job
+        # `seq` of the last row on the previous page (exclusive). A nil
+        # or empty cursor starts from the oldest visible job.
+        cursor_seq = decode_cursor(cursor)
+        status_filter = filter['status']
+        agent_filter = filter['agent']
+
+        rows = []
+        next_cursor = nil
+        @mutex.synchronize do
+          @order.each do |job_id|
+            record = @jobs[job_id]
+            next if record.nil?
+            next if record.seq <= cursor_seq
+            next if record.principal_id != principal_id
+            next if status_filter && !status_filter.include?(record.status)
+            next if agent_filter && !record.agent.start_with?(agent_filter)
+
+            if rows.size == limit
+              next_cursor = rows.last.seq.to_s
+              break
+            end
+            rows << record
+          end
         end
 
-        page = rows[offset, limit] || []
-        next_cursor = (offset + page.size) < rows.size ? (offset + page.size).to_s : nil
-
-        summaries = page.map do |r|
+        summaries = rows.map do |r|
           lease = @leases.get(r.job_id)
           counter = @leases.counter(r.job_id)
           Arcp::Job::Summary.new(
@@ -156,6 +186,14 @@ module Arcp
           jobs: summaries.map(&:to_h), next_cursor: next_cursor
         )
       end
+
+      def decode_cursor(cursor)
+        return 0 if cursor.nil? || cursor.to_s.empty?
+        return cursor.to_i if /\A\d+\z/.match?(cursor.to_s)
+
+        0
+      end
+      private :decode_cursor
 
       def lookup(job_id) = @mutex.synchronize { @jobs[job_id] }
 
@@ -217,6 +255,8 @@ module Arcp
 
       def build_lease(submit, job_id)
         return nil unless submit.lease_request
+
+        submit.lease_constraints&.enforce_max_budget!(submit.lease_request.budget)
 
         Arcp::Lease::Lease.new(
           id: "lse_#{job_id}",

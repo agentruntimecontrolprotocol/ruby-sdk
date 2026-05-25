@@ -2,10 +2,22 @@ module Arcp
   module Lease
     class LeaseConstraints
       attr_reader expires_at: String?
-      attr_reader max_budget: Hash[String, untyped]?
+      attr_reader max_budget: CostBudget?
+      def initialize: (?expires_at: String?, ?max_budget: untyped?) -> void
       def self.from_h: (Hash[String | Symbol, untyped]?) -> LeaseConstraints?
+      def self.parse_max_budget: (untyped) -> CostBudget?
       def to_h: () -> Hash[String, untyped]
       def validate!: () -> void
+      def enforce_max_budget!: (CostBudget?) -> void
+    end
+
+    class BudgetCounter
+      attr_reader remaining: Hash[String, BigDecimal]
+      def initialize: (initial: Hash[String, BigDecimal]) -> void
+      def try_decrement: (String, BigDecimal) -> bool
+      def get: (String) -> BigDecimal
+      def negative?: (String) -> bool
+      def snapshot: () -> Hash[String, BigDecimal]
     end
 
     class CostBudget

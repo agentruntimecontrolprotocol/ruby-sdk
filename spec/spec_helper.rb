@@ -5,6 +5,8 @@ SimpleCov.start do
   enable_coverage :branch
   add_filter '/spec/'
   add_filter '/samples/'
+  add_filter '/recipes/'
+  minimum_coverage line: 90, branch: 80
 end
 
 $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))

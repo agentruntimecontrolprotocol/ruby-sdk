@@ -9,7 +9,15 @@ require_relative 'credential'
 module Arcp
   module Lease
     # Immutable lease bounds attached to a job request or granted lease.
+    # `max_budget` is a {CostBudget} expressing the maximum per-currency
+    # amount that a requested lease budget may declare for this job; it
+    # accepts the same shape as `cost.budget` (a list of `"CCY:amount"`
+    # entries) or a pre-parsed {CostBudget}.
     LeaseConstraints = Data.define(:expires_at, :max_budget) do
+      def initialize(expires_at: nil, max_budget: nil)
+        super(expires_at: expires_at, max_budget: self.class.parse_max_budget(max_budget))
+      end
+
       def self.from_h(h)
         return nil if h.nil?
 
@@ -17,18 +25,63 @@ module Arcp
         new(expires_at: h['expires_at'], max_budget: h['max_budget'])
       end
 
+      def self.parse_max_budget(value)
+        case value
+        when nil then nil
+        when CostBudget then value
+        when Array then CostBudget.parse(value)
+        when Hash
+          h = value.transform_keys(&:to_s)
+          CostBudget.parse(h['cost.budget'] || h.values_at(*h.keys).flatten)
+        else
+          raise Arcp::Errors::InvalidRequest,
+                "max_budget must be a list of 'CCY:amount' entries or a CostBudget"
+        end
+      end
+
       def to_h
         out = {}
         out['expires_at'] = expires_at if expires_at
-        out['max_budget'] = max_budget if max_budget
+        out['max_budget'] = max_budget.to_a if max_budget
         out
       end
 
       def validate!
-        return if expires_at.nil?
+        unless expires_at.nil?
+          t = Time.iso8601(expires_at)
+          raise Arcp::Errors::InvalidRequest, "expires_at must be UTC (use 'Z'): #{expires_at}" unless t.utc?
+        end
 
-        t = Time.iso8601(expires_at)
-        raise Arcp::Errors::InvalidRequest, "expires_at must be UTC (use 'Z'): #{expires_at}" unless t.utc?
+        validate_max_budget!
+      end
+
+      # Raises {Arcp::Errors::LeaseSubsetViolation} if a requested lease
+      # budget exceeds the per-currency caps declared in `max_budget`.
+      # A request that omits a currency declared in `max_budget` is allowed.
+      def enforce_max_budget!(requested_budget)
+        return if max_budget.nil?
+        return if requested_budget.nil?
+
+        offending = requested_budget.per_currency.filter_map do |ccy, amt|
+          cap = max_budget.per_currency[ccy]
+          ccy if cap.nil? || amt > cap
+        end
+        return if offending.empty?
+
+        raise Arcp::Errors::LeaseSubsetViolation.new(
+          "lease budget exceeds lease_constraints max_budget for: #{offending.inspect}",
+          details: { 'currencies' => offending }
+        )
+      end
+
+      private
+
+      def validate_max_budget!
+        return if max_budget.nil?
+        return if max_budget.is_a?(CostBudget)
+
+        raise Arcp::Errors::InvalidRequest,
+              'max_budget must be a CostBudget after parsing'
       end
     end
 

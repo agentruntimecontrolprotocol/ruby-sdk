@@ -20,7 +20,8 @@ module Arcp
         @sink = sink
         @event_seq = 0
         @result_id = nil
-        @result_buffer = []
+        @result_totals = nil
+        @writer = nil
         @done = false
         @chunked = false
         @mutex = Mutex.new
@@ -83,14 +84,21 @@ module Arcp
         @result_id = Arcp::Ids.result_id
 
         writer = ChunkWriter.new(ctx: self, encoding: encoding, result_id: @result_id)
+        @writer = writer
         if block
           yield writer
           writer.close
-          @result_buffer = writer.totals
-          @result_buffer
+          writer.totals
         else
           writer
         end
+      end
+
+      # @api private
+      # Called by ChunkWriter#close so non-block callers don't have to push
+      # totals back into the context manually before {#finish}.
+      def record_chunk_totals(totals)
+        @result_totals = totals
       end
 
       def finish(result: nil)
@@ -100,6 +108,8 @@ module Arcp
           raise Arcp::Errors::ProtocolViolation, 'cannot mix inline result with result_chunk stream'
         end
 
+        @writer&.close if @chunked
+        totals = @result_totals || @writer&.totals
         @done = true
 
         @sink.publish_result(
@@ -108,7 +118,7 @@ module Arcp
             job_id: @job_id, final_status: 'success',
             result: result,
             result_id: @chunked ? @result_id : nil,
-            result_size: @chunked ? @result_buffer[:bytes] : nil,
+            result_size: @chunked ? totals && totals[:bytes] : nil,
             completed_at: Time.now.utc.iso8601
           )
         )
@@ -158,6 +168,7 @@ module Arcp
           return if @closed
 
           @closed = true
+          @ctx.record_chunk_totals(totals)
         end
 
         def totals = { bytes: @bytes, chunks: @seq, result_id: @result_id }

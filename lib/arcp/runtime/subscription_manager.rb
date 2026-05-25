@@ -52,6 +52,18 @@ module Arcp
           @owners.delete(job_id)
         end
       end
+
+      # Replace the outbox bound to a session id across every job. Used
+      # when a session resumes: the new actor's outbox supersedes the old.
+      def rebind_session(session_id, new_queue)
+        @mutex.synchronize do
+          @subs.each_value do |entries|
+            entries.each_with_index do |(sid, pid, _), idx|
+              entries[idx] = [sid, pid, new_queue] if sid == session_id
+            end
+          end
+        end
+      end
     end
   end
 end
