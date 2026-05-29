@@ -1,9 +1,0 @@
---output-dir docs/api
---protected
---no-private
---markup markdown
---markup-provider redcarpet
---readme README.md
---files CHANGELOG.md
--
-lib/**/*.rb

@@ -24,9 +24,14 @@ task :diagrams do
   sh 'bin/render-diagrams.sh'
 end
 
-desc 'Build YARD docs into docs/api/'
-task :docs do
-  sh 'yard doc'
+namespace :docs do
+  desc 'Generate Markdown API reference into docs/api/'
+  task :api do
+    sh 'ruby scripts/gen-api-docs.rb'
+  end
 end
+
+desc 'Alias for docs:api'
+task docs: 'docs:api'
 
 task default: %i[spec rubocop]
