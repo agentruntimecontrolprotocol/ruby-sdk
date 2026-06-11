@@ -6,7 +6,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64, arcp]
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -17,7 +17,7 @@ jobs:
       - run: bundle exec bundle-audit check --update
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64, arcp]
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -27,7 +27,7 @@ jobs:
       - run: bundle exec rspec
 
   docs:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64, arcp]
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -37,7 +37,7 @@ jobs:
       - run: bundle exec yard --fail-on-warning
 
   steep:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64, arcp]
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1

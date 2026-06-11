@@ -32,7 +32,7 @@ permissions:
 jobs:
   test:
     name: Ruby ${{ matrix.ruby }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64, arcp]
     strategy:
       fail-fast: false
       matrix:
