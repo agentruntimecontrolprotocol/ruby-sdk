@@ -189,7 +189,15 @@ module Arcp
 
       def loop_inbound(_parent)
         loop do
-          env = @transport.receive
+          begin
+            env = @transport.receive
+          rescue Arcp::Error => e
+            # A malformed envelope (bad arcp version / trace_id / schema) is a
+            # per-message error per spec §12, not grounds for tearing down an
+            # authenticated session. Surface it and keep serving the session.
+            send_session_error(@session_id, code: e.code, message: e.message)
+            next
+          end
           break if env.nil?
 
           dispatch(env)
@@ -228,6 +236,13 @@ module Arcp
         # forward-compat: unknown wire types fall through silently.
       rescue Arcp::Error => e
         reply_error(env, e)
+      rescue KeyError, TypeError, ArgumentError => e
+        # A missing/invalid required field in a per-message decoder (e.g.
+        # `Hash#fetch` raising KeyError on a missing `agent`) is a schema
+        # violation, not session-fatal. Reply INVALID_REQUEST and continue.
+        reply_error(env, Arcp::Errors::InvalidRequest.new(e.message))
+      rescue StandardError => e
+        reply_error(env, Arcp::Errors::Internal.new(e.message))
       end
 
       def handle_list_jobs(env)
