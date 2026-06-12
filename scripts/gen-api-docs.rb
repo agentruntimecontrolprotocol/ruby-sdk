@@ -40,10 +40,8 @@ end
 # Top-of-file comment block: skip shebang/magic-comments, then take leading #.
 def file_overview(lines)
   i = 0
-  i += 1 if lines[i] =~ /\A#!/
-  while lines[i] && lines[i] =~ /\A\s*#\s*(frozen_string_literal|encoding|warn_indent):/i
-    i += 1
-  end
+  i += 1 if lines[i].start_with?('#!')
+  i += 1 while lines[i] && lines[i] =~ /\A\s*#\s*(frozen_string_literal|encoding|warn_indent):/i
   i += 1 while lines[i] && lines[i].strip.empty?
   block = []
   while lines[i] && lines[i] =~ /\A\s*#/
@@ -53,7 +51,8 @@ def file_overview(lines)
   block
 end
 
-DECL_RE = /\A(\s*)(module|class|def)\s+([^\s(;]+)(.*)\z/.freeze
+DECL_RE = /\A(\s*)(module|class|def)\s+([^\s(;]+)(.*)\z/
+CONTAINER_KINDS = %w[module class].freeze
 
 # For `def` signatures that span multiple physical lines (trailing `,` or open
 # paren without matching close), keep appending until balanced.
@@ -65,8 +64,10 @@ def join_continued_signature(lines, idx)
     closes = sig.count(')') + sig.count(']')
     trailing_comma = sig =~ /,\s*\z/
     break unless trailing_comma || opens > closes
+
     i += 1
     break unless lines[i]
+
     sig = "#{sig}\n#{lines[i].rstrip}"
   end
   sig
@@ -79,6 +80,7 @@ def parse_declarations(lines)
   lines.each_with_index do |raw, idx|
     line = raw.rstrip
     next if line.strip.empty?
+
     if (m = line.match(DECL_RE))
       kind = m[2]
       name = m[3]
@@ -89,12 +91,12 @@ def parse_declarations(lines)
       qualified = if kind == 'def'
                     sep = name.start_with?('self.') ? '.' : '#'
                     base = stack.join('::')
-                    base.empty? ? sig : "#{base}#{sep}#{name.sub(/\Aself\./, '')}"
+                    base.empty? ? sig : "#{base}#{sep}#{name.delete_prefix('self.')}"
                   else
                     (stack + [name]).join('::')
                   end
       results << { kind: kind, name: name, qualified: qualified, signature: sig.strip, comment: comment }
-      stack.push(name) if kind == 'module' || kind == 'class'
+      stack.push(name) if CONTAINER_KINDS.include?(kind)
     elsif line =~ /\A\s*end\b/ && !stack.empty?
       # crude: pop on bare `end`. Method `end`s also pop nothing since we don't push for def.
       # We only pop when the `end` is at the indentation of the top stack frame's owner;
@@ -112,13 +114,14 @@ end
 
 def render_comment(lines)
   return '' if lines.empty?
+
   # Split into prose body vs YARD tag groups. A tag group starts at @tag and
   # absorbs subsequent indented continuation lines.
   body = []
   tags = []
   current = nil
   lines.each do |l|
-    if l =~ /\A@\w/
+    if /\A@\w/.match?(l)
       tags << (current = [l])
     elsif current && (l.start_with?('  ') || l.strip.empty?)
       current << l
@@ -136,7 +139,7 @@ def render_comment(lines)
       if rest.empty?
         "- `#{head}`"
       else
-        code = rest.map { |x| x.sub(/\A  /, '') }.join("\n")
+        code = rest.map { |x| x.delete_prefix('  ') }.join("\n")
         "**`#{head}`**\n\n```ruby\n#{code}\n```"
       end
     end.join("\n\n")
@@ -147,11 +150,9 @@ end
 def render_file(rel_path, lines)
   overview = file_overview(lines)
   decls = parse_declarations(lines)
-  io = +""
+  io = +''
   io << "# `#{rel_path}`\n\n"
-  unless overview.empty?
-    io << render_comment(overview) << "\n\n"
-  end
+  io << render_comment(overview) << "\n\n" unless overview.empty?
   if decls.empty?
     io << "_No documented declarations._\n"
     return io
@@ -161,7 +162,7 @@ def render_file(rel_path, lines)
     io << "## #{heading}\n\n"
     io << "```ruby\n#{d[:signature]}\n```\n\n"
     body = render_comment(d[:comment])
-    io << (body.empty? ? "_(undocumented)_\n\n" : body + "\n\n")
+    io << (body.empty? ? "_(undocumented)_\n\n" : "#{body}\n\n")
   end
   io
 end
@@ -169,7 +170,7 @@ end
 FileUtils.rm_rf(OUT)
 FileUtils.mkdir_p(OUT)
 
-files = Dir.glob(LIB.join('**', '*.rb')).sort
+files = Dir.glob(LIB.join('**', '*.rb'))
 pages = []
 
 files.each do |path|
@@ -185,7 +186,7 @@ end
 
 index = +"# API Reference\n\nGenerated from `lib/` sources. One page per source file.\n\n"
 pages.sort.each do |p|
-  title = p.sub(/\.md\z/, '')
+  title = p.delete_suffix('.md')
   index << "- [`#{title}`](./#{p})\n"
 end
 File.write(OUT.join('index.md'), index)
