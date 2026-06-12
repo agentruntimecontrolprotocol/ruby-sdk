@@ -128,4 +128,25 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
       end
     end
   end
+
+  describe 'closing a session detaches its subscriptions (#73)' do
+    it 'stops fanout into the closed session outbox for a still-running job' do
+      Sync do
+        runtime = build_runtime(agents: { sleepy: ->(_ctx) { Async::Task.current.sleep(5) } })
+        client, server_task = open_pair(runtime)
+
+        handle = client.submit_job(agent: 'sleepy')
+        session_id = client.session.id
+
+        client.close
+        Async::Task.current.sleep(0.05)
+
+        # The closed session's rows must be gone from the job's subscriber set.
+        subs = runtime.subscription_manager.instance_variable_get(:@subs)[handle.job_id] || []
+        expect(subs.map { |(sid, _, _)| sid }).not_to include(session_id)
+
+        server_task.stop
+      end
+    end
+  end
 end

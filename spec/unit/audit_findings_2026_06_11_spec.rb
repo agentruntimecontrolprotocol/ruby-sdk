@@ -66,4 +66,29 @@ RSpec.describe 'audit findings 2026-06-11 (unit)' do
       expect(job_error(code: 'BUDGET_EXHAUSTED', retryable: false).to_exception.retryable?).to be(false)
     end
   end
+
+  describe 'SubscriptionManager#detach_session (#73)' do
+    let(:manager) { Arcp::Runtime::SubscriptionManager.new }
+    let(:recording_queue) do
+      Class.new do
+        attr_reader :items
+
+        def initialize = @items = []
+        def enqueue(item) = @items << item
+      end
+    end
+
+    it 'removes every subscription row for a session so fanout skips its outbox' do
+      owner_q = recording_queue.new
+      observer_q = recording_queue.new
+      manager.register_owner('job1', 'alice', 'ses_owner', owner_q)
+      manager.attach('job1', 'alice', 'ses_obs', observer_q)
+
+      manager.detach_session('ses_owner')
+      manager.fanout('job1', :event)
+
+      expect(owner_q.items).to be_empty
+      expect(observer_q.items).to eq([:event])
+    end
+  end
 end

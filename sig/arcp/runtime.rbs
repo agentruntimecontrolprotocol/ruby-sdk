@@ -63,6 +63,7 @@ module Arcp
       def register_owner: (String, String, String, untyped) -> untyped
       def attach: (String, String, String, untyped) -> untyped
       def detach: (String, String) -> untyped
+      def detach_session: (String) -> untyped
       def fanout: (String, Arcp::Envelope) -> untyped
       def owner_of: (String) -> String?
       def clear: (String) -> untyped

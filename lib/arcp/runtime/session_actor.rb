@@ -365,7 +365,13 @@ module Arcp
         @writer_task&.stop
         @outbox.enqueue(:__arcp_close__)
         @transport.close
-        @runtime.deregister_session(@session_id) if @session_id
+        if @session_id
+          @runtime.deregister_session(@session_id)
+          # Drop this session's subscription rows so fanout for jobs that
+          # outlive the connection stops enqueueing into the dead outbox.
+          # A resuming session re-binds a fresh outbox via rebind_session.
+          @runtime.subscription_manager.detach_session(@session_id)
+        end
         return unless @resume_token
 
         @runtime.resume_registry.mark_disconnected(

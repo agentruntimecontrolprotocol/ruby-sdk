@@ -39,6 +39,17 @@ module Arcp
         end
       end
 
+      # Remove every subscription row owned by a session across all jobs.
+      # Called when a session is torn down so fanout for still-running jobs
+      # stops enqueueing into the closed session's orphaned outbox.
+      def detach_session(session_id)
+        @mutex.synchronize do
+          @subs.each_value do |entries|
+            entries.reject! { |s, _, _| s == session_id }
+          end
+        end
+      end
+
       def fanout(job_id, envelope)
         targets = @mutex.synchronize { @subs[job_id].dup }
         targets.each { |_s, _p, q| q.enqueue(envelope) }
