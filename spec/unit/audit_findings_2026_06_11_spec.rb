@@ -40,4 +40,30 @@ RSpec.describe 'audit findings 2026-06-11 (unit)' do
       expect(manager.remaining('job1')['USD']).to eq(BigDecimal('1.00'))
     end
   end
+
+  describe 'JobError#to_exception preserves the wire retryable flag (#68)' do
+    def job_error(code:, retryable:)
+      Arcp::Job::JobError.from_h(
+        'job_id' => 'job1', 'final_status' => 'error',
+        'code' => code, 'retryable' => retryable
+      )
+    end
+
+    it 'honors a non-retryable wire flag over the class default' do
+      exc = job_error(code: 'TIMEOUT', retryable: false).to_exception
+      expect(exc).to be_a(Arcp::Errors::Timeout)
+      expect(exc.retryable?).to be(false)
+    end
+
+    it 'honors a retryable wire flag over the class default' do
+      exc = job_error(code: 'LEASE_EXPIRED', retryable: true).to_exception
+      expect(exc).to be_a(Arcp::Errors::LeaseExpired)
+      expect(exc.retryable?).to be(true)
+    end
+
+    it 'keeps LEASE_EXPIRED / BUDGET_EXHAUSTED non-retryable when the wire agrees' do
+      expect(job_error(code: 'LEASE_EXPIRED', retryable: false).to_exception.retryable?).to be(false)
+      expect(job_error(code: 'BUDGET_EXHAUSTED', retryable: false).to_exception.retryable?).to be(false)
+    end
+  end
 end

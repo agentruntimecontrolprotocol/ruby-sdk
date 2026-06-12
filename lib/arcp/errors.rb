@@ -124,9 +124,13 @@ module Arcp
     RETRYABLE_BY_DEFAULT = ALL.select { |k| k.new.retryable? }.map { |k| k::CODE }.freeze
     NON_RETRYABLE_BY_DEFAULT = (WIRE_CODES - RETRYABLE_BY_DEFAULT).freeze
 
-    def self.for(code, message: nil, details: {})
+    def self.for(code, message: nil, details: {}, retryable: nil)
       klass = BY_CODE[code] || Arcp::Errors::Internal
-      klass.new(message, details: details)
+      err = klass.new(message, details: details)
+      # Honor the wire-supplied retryable flag, overriding the class default
+      # only when the runtime explicitly provided one.
+      err.define_singleton_method(:retryable?) { retryable } unless retryable.nil?
+      err
     end
   end
 

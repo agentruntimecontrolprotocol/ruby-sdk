@@ -35,6 +35,6 @@ module Arcp
     RETRYABLE_BY_DEFAULT: Array[String]
     NON_RETRYABLE_BY_DEFAULT: Array[String]
 
-    def self.for: (String, ?message: String?, ?details: Hash[untyped, untyped]) -> Arcp::Error
+    def self.for: (String, ?message: String?, ?details: Hash[untyped, untyped], ?retryable: bool?) -> Arcp::Error
   end
 end

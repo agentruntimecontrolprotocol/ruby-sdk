@@ -24,7 +24,7 @@ module Arcp
       end
 
       def to_exception
-        Arcp::Errors.for(code, message: message, details: details)
+        Arcp::Errors.for(code, message: message, details: details, retryable: retryable)
       end
     end
   end
