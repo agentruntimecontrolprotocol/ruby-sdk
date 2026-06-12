@@ -92,6 +92,25 @@ RSpec.describe 'audit findings 2026-06-11 (unit)' do
     end
   end
 
+  describe 'ResultChunk#decoded uses strict base64 (#77)' do
+    def chunk(data)
+      Arcp::Job::EventBody::ResultChunk.new(
+        result_id: 'res_1', chunk_seq: 0, data: data, encoding: 'base64', more: false
+      )
+    end
+
+    it 'round-trips binary data byte-for-byte' do
+      binary = (0..255).to_a.pack('C*')
+      encoded = Base64.strict_encode64(binary)
+      expect(chunk(encoded).decoded).to eq(binary)
+    end
+
+    it 'raises InvalidRequest on malformed (line-wrapped/whitespace) base64' do
+      wrapped = "#{Base64.strict_encode64('hello world payload')}\n"
+      expect { chunk(wrapped).decoded }.to raise_error(Arcp::Errors::InvalidRequest)
+    end
+  end
+
   describe 'EventLog#replay_job boundary helper (#75)' do
     it 'excludes the event equal to the strict from_event_seq cursor' do
       clock = Arcp::FakeClock.new

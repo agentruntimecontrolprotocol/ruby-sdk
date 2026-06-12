@@ -32,8 +32,16 @@ module Arcp
 
         def decoded
           case encoding
-          when 'utf8'   then data
-          when 'base64' then Base64.decode64(data)
+          when 'utf8' then data
+          when 'base64'
+            # Mirror the strict encoder (Base64.strict_encode64): reject
+            # malformed/whitespace-injected input instead of silently
+            # truncating it into corrupt bytes.
+            begin
+              Base64.strict_decode64(data)
+            rescue ArgumentError => e
+              raise Arcp::Errors::InvalidRequest, "malformed base64 result_chunk: #{e.message}"
+            end
           end
         end
       end
