@@ -35,6 +35,7 @@ module Arcp
         @next_seq = 0                   # monotonic counter assigned at submit
         @event_seq = Hash.new(0)        # job_id => last emitted seq
         @idempotency = {}               # [principal, key] => job_id
+        @accepted = {}                  # job_id => [resolved, lease, credentials, accepted_at]
         @mutex = Mutex.new
       end
 
@@ -77,17 +78,8 @@ module Arcp
         reg, resolved = resolve_agent(submit.agent)
 
         if submit.idempotency_key
-          key = [principal_id, submit.idempotency_key]
-          if (existing = @mutex.synchronize { @idempotency[key] })
-            existing_record = @mutex.synchronize { @jobs[existing] }
-            if existing_record && existing_record.agent != resolved
-              raise Arcp::Errors::DuplicateKey.new(
-                'idempotency key reused with different agent',
-                details: { 'job_id' => existing }
-              )
-            end
-            return existing
-          end
+          replay = idempotent_replay(submit.idempotency_key, principal_id, resolved)
+          return replay if replay
         end
 
         job_id = Arcp::Ids.job_id
@@ -97,6 +89,7 @@ module Arcp
         credentials = issue_credentials(
           job_id: job_id, lease: lease, agent: resolved, principal_id: principal_id
         )
+        accepted_at = @clock.now.iso8601
 
         seq = @mutex.synchronize { @next_seq += 1 }
         # Record the job in `running` state up front so an agent task that
@@ -110,6 +103,7 @@ module Arcp
         @mutex.synchronize do
           @jobs[job_id] = record
           @order << job_id
+          @accepted[job_id] = [resolved, lease, credentials, accepted_at]
           @idempotency[[principal_id, submit.idempotency_key]] = job_id if submit.idempotency_key
         end
 
@@ -123,7 +117,7 @@ module Arcp
           @jobs[job_id] = existing.with(task: task) if existing
         end
 
-        [job_id, resolved, lease, credentials]
+        [job_id, resolved, lease, credentials, accepted_at]
       end
 
       def cancel(job_id:, principal_id:, reason: nil)
@@ -244,6 +238,26 @@ module Arcp
       end
 
       private
+
+      # Returns the replay value for an idempotent resubmission, or nil when
+      # the key has not been seen. Raises DuplicateKey if the key was used for
+      # a different agent. Spec §7.2: a hit returns the *same* job.accepted
+      # payload (lease, credentials, accepted_at) recorded at first acceptance.
+      def idempotent_replay(idempotency_key, principal_id, resolved)
+        existing = @mutex.synchronize { @idempotency[[principal_id, idempotency_key]] }
+        return nil unless existing
+
+        existing_record = @mutex.synchronize { @jobs[existing] }
+        if existing_record && existing_record.agent != resolved
+          raise Arcp::Errors::DuplicateKey.new(
+            'idempotency key reused with different agent',
+            details: { 'job_id' => existing }
+          )
+        end
+
+        cached = @mutex.synchronize { @accepted[existing] }
+        cached ? [existing, *cached] : existing
+      end
 
       def issue_credentials(job_id:, lease:, agent:, principal_id:)
         return nil unless @runtime.credential_registry

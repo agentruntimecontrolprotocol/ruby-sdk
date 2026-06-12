@@ -57,4 +57,28 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
       end
     end
   end
+
+  describe 'idempotent resubmission returns the original job.accepted payload (#70)' do
+    it 'replays the same credentials, lease, accepted_at and job_id' do
+      Sync do
+        runtime = build_runtime(
+          agents: { worker: ->(ctx) { ctx.finish(result: 'ok') } },
+          credential_provisioner: Arcp::Credentials::InMemoryProvisioner.new
+        )
+        client, server_task = open_pair(runtime)
+
+        first = client.submit_job(agent: 'worker', idempotency_key: 'key-1')
+        second = client.submit_job(agent: 'worker', idempotency_key: 'key-1')
+
+        expect(second.job_id).to eq(first.job_id)
+        expect(second.credentials).to eq(first.credentials)
+        expect(second.credentials).not_to be_nil
+        expect(second.lease).to eq(first.lease)
+        expect(second.submitted_at).to eq(first.submitted_at)
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
 end

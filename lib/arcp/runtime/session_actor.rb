@@ -270,10 +270,10 @@ module Arcp
           session_id: @session_id, session_actor: self
         )
         if result.is_a?(Array)
-          job_id, resolved_agent, lease, credentials = result
+          job_id, resolved_agent, lease, credentials, accepted_at = result
           accepted = Arcp::Job::Accepted.new(
             job_id: job_id, agent: resolved_agent,
-            accepted_at: @runtime.clock.now.iso8601,
+            accepted_at: accepted_at,
             lease: lease,
             credentials: credentials
           )
