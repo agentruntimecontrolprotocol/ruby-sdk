@@ -117,6 +117,8 @@ module Arcp
       end
 
       def try_decrement(currency, amount)
+        return false if amount.nil? || amount.negative?
+
         balance = @remaining[currency]
         return false if balance.nil?
         return false if balance < amount

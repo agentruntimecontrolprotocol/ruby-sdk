@@ -61,6 +61,13 @@ module Arcp
       # remain unrestricted. Straight-line — no scheduler-yielding calls
       # between read and write.
       def try_spend!(job_id, currency, amount)
+        if amount.nil? || amount.negative?
+          raise Arcp::Errors::InvalidRequest.new(
+            "budget amount must be non-negative: #{amount.inspect}",
+            details: { 'currency' => currency, 'amount' => amount&.to_s }
+          )
+        end
+
         counter = self.counter(job_id)
         return true if counter.nil?
         return true if counter.remaining.empty?

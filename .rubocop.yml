@@ -117,6 +117,7 @@ RSpec/DescribeClass:
     - 'spec/e2e/**/*'
     - 'spec/unit/coverage_spec.rb'
     - 'spec/unit/coverage_extras_spec.rb'
+    - 'spec/unit/audit_findings_2026_06_11_spec.rb'
 
 # Specs are grouped by test layer (`unit`, `integration`, `e2e`) instead of
 # mirroring the source tree exactly.
