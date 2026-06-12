@@ -129,6 +129,37 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
     end
   end
 
+  describe 'job.subscribe history replay is strictly greater than from_event_seq (#75)' do
+    it 'excludes the event whose seq equals from_event_seq' do
+      Sync do
+        runtime = build_runtime(
+          agents: { producer: lambda { |ctx|
+            5.times { |i| ctx.log(level: 'info', message: "e#{i}") }
+            Async::Task.current.sleep(5)
+          } },
+          tokens: { 'alice-tok' => 'alice', 'obs-tok' => 'alice' }
+        )
+        submitter, sub_task = open_pair(runtime, auth: { 'token' => 'alice-tok' })
+        observer, obs_task = open_pair(runtime, auth: { 'token' => 'obs-tok' })
+
+        handle = submitter.submit_job(agent: 'producer')
+        Async::Task.current.sleep(0.05) # let the producer emit all five events
+
+        stream = observer.subscribe_job(job_id: handle.job_id, from_event_seq: 2, history: true)
+        replayed = stream.first(3)
+        messages = replayed.map { |e| e.body.message }
+
+        # seq 1..5 carry messages e0..e4; from_event_seq:2 must replay seq 3,4,5.
+        expect(messages).to eq(%w[e2 e3 e4])
+
+        submitter.close
+        observer.close
+        sub_task.stop
+        obs_task.stop
+      end
+    end
+  end
+
   describe 'closing a session detaches its subscriptions (#73)' do
     it 'stops fanout into the closed session outbox for a still-running job' do
       Sync do

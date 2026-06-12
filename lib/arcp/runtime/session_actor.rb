@@ -310,7 +310,11 @@ module Arcp
         @runtime.subscription_manager.attach(sub.job_id, @principal.id, @session_id, @outbox)
 
         if sub.history
-          replay = @runtime.event_log.replay_job(sub.job_id, from_event_seq: sub.from_event_seq)
+          # Spec §7.6: replay events with seq strictly greater than
+          # from_event_seq, so the subscriber never re-receives the event it
+          # already acknowledged at from_event_seq.
+          from = sub.from_event_seq ? sub.from_event_seq + 1 : nil
+          replay = @runtime.event_log.replay_job(sub.job_id, from_event_seq: from)
           replay.each { |e| send_envelope(e) }
         end
 

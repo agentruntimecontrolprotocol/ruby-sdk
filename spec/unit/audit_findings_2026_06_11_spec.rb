@@ -91,4 +91,22 @@ RSpec.describe 'audit findings 2026-06-11 (unit)' do
       expect(observer_q.items).to eq([:event])
     end
   end
+
+  describe 'EventLog#replay_job boundary helper (#75)' do
+    it 'excludes the event equal to the strict from_event_seq cursor' do
+      clock = Arcp::FakeClock.new
+      log = Arcp::Runtime::EventLog.new(window_sec: 60, clock: clock)
+      3.times do |i|
+        log.append('ses_1', Arcp::Envelope.build(
+                              type: Arcp::MessageTypes::JOB_EVENT,
+                              session_id: 'ses_1', job_id: 'job1', event_seq: i + 1,
+                              payload: { 'kind' => 'log' }
+                            ))
+      end
+
+      # Mirrors the session actor passing from_event_seq + 1.
+      replay = log.replay_job('job1', from_event_seq: 1 + 1)
+      expect(replay.map(&:event_seq)).to eq([2, 3])
+    end
+  end
 end
