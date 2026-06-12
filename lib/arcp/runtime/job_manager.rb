@@ -275,16 +275,20 @@ module Arcp
       end
 
       def build_lease(submit, job_id)
-        return nil unless submit.lease_request
+        request = submit.lease_request
+        constraints = submit.lease_constraints
+        # A constraints-only submit (e.g. just an expires_at) must still
+        # produce a lease so the expiry is registered and enforceable.
+        return nil unless request || constraints
 
-        submit.lease_constraints&.enforce_max_budget!(submit.lease_request.budget)
+        constraints&.enforce_max_budget!(request&.budget)
 
         Arcp::Lease::Lease.new(
           id: "lse_#{job_id}",
-          capabilities: submit.lease_request.capabilities,
-          budget: submit.lease_request.budget,
-          model_use: submit.lease_request.model_use,
-          expires_at: submit.lease_constraints&.expires_at || submit.lease_request.expires_at,
+          capabilities: request&.capabilities || [],
+          budget: request&.budget,
+          model_use: request&.model_use,
+          expires_at: constraints&.expires_at || request&.expires_at,
           issued_at: @clock.now.iso8601
         )
       end
