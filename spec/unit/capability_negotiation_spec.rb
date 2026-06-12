@@ -32,7 +32,13 @@ RSpec.describe Arcp::Runtime::Runtime do
   it 'does not advertise provisioned credentials without a provisioner' do
     runtime = described_class.new(auth_verifier: auth)
 
-    expect(runtime.local_capabilities.features).not_to include('model.use')
+    expect(runtime.local_capabilities.features).not_to include('provisioned_credentials')
+  end
+
+  it 'advertises model.use independently of credential provisioning' do
+    runtime = described_class.new(auth_verifier: auth)
+
+    expect(runtime.local_capabilities.features).to include('model.use')
     expect(runtime.local_capabilities.features).not_to include('provisioned_credentials')
   end
 

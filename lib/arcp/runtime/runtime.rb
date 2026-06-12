@@ -74,12 +74,10 @@ module Arcp
       # Returns the runtime's advertised local capabilities.
       def local_capabilities(agents_inventory: false)
         features = Arcp::Session::Feature::ALL.dup
-        unless @credential_registry
-          features -= [
-            Arcp::Session::Feature::MODEL_USE,
-            Arcp::Session::Feature::PROVISIONED_CREDENTIALS
-          ]
-        end
+        # provisioned_credentials depends on a credential registry; model.use
+        # is an independent lease capability (§9.7) and must be advertised
+        # regardless of whether credential provisioning is configured.
+        features -= [Arcp::Session::Feature::PROVISIONED_CREDENTIALS] unless @credential_registry
 
         Arcp::Session::CapabilitySet.local(
           features: features,
