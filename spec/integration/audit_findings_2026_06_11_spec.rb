@@ -81,4 +81,29 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
       end
     end
   end
+
+  describe 'cancel on a terminal job is a no-op (#71)' do
+    it 'does not overwrite terminal status or emit a second terminal event' do
+      Sync do
+        runtime = build_runtime(agents: { quick: ->(ctx) { ctx.finish(result: 'ok') } })
+        client, server_task = open_pair(runtime)
+
+        handle = client.submit_job(agent: 'quick')
+        expect(handle.get_result(client: client).result).to eq('ok')
+
+        handle.cancel(client: client, reason: 'too late')
+        Async::Task.current.sleep(0.05)
+
+        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('succeeded')
+
+        replay = runtime.event_log.replay_job(handle.job_id, from_event_seq: 0)
+        types = replay.map(&:type)
+        expect(types).to include(Arcp::MessageTypes::JOB_RESULT)
+        expect(types).not_to include(Arcp::MessageTypes::JOB_ERROR)
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
 end

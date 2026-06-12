@@ -120,6 +120,8 @@ module Arcp
         [job_id, resolved, lease, credentials, accepted_at]
       end
 
+      TERMINAL_STATUSES = %w[success succeeded error cancelled timed_out].freeze
+
       def cancel(job_id:, principal_id:, reason: nil)
         record = @mutex.synchronize { @jobs[job_id] }
         raise Arcp::Errors::JobNotFound, "no such job: #{job_id}" unless record
@@ -130,6 +132,11 @@ module Arcp
             details: { 'job_id' => job_id }
           )
         end
+
+        # Spec §7.4: cancellation applies only to a non-terminal job. A
+        # late/duplicate cancel must not overwrite a job's recorded terminal
+        # status, double-emit a terminal job.error, or re-run teardown.
+        return if TERMINAL_STATUSES.include?(record.status)
 
         record.task&.stop
         publish_error(job_id, Arcp::Job::JobError.new(
