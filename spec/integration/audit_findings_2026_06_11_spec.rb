@@ -106,4 +106,26 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
       end
     end
   end
+
+  describe 'max_runtime_sec watchdog is cancelled on completion (#72)' do
+    it 'completes successfully with no spurious timeout after the deadline' do
+      Sync do
+        runtime = build_runtime(agents: { fast: ->(ctx) { ctx.finish(result: 'done') } })
+        client, server_task = open_pair(runtime)
+
+        handle = client.submit_job(agent: 'fast', max_runtime_sec: 0.05)
+        expect(handle.get_result(client: client).result).to eq('done')
+
+        # Sleep past the deadline; a leaked watchdog would wake and fail here.
+        Async::Task.current.sleep(0.1)
+
+        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('succeeded')
+        types = runtime.event_log.replay_job(handle.job_id, from_event_seq: 0).map(&:type)
+        expect(types).not_to include(Arcp::MessageTypes::JOB_ERROR)
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
 end

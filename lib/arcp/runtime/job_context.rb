@@ -12,6 +12,8 @@ module Arcp
     class JobContext
       attr_reader :job_id, :agent, :input, :lease, :event_seq
 
+      def done? = @done
+
       def initialize(job_id:, agent:, input:, lease:, sink:)
         @job_id = job_id
         @agent = agent

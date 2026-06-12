@@ -108,6 +108,7 @@ module Arcp
       attr_reader input: untyped
       attr_reader lease: Arcp::Lease::Lease?
       attr_reader event_seq: Integer
+      def done?: () -> bool
       def emit: (kind: String, body: untyped) -> Arcp::Job::Event
       def log: (level: String, message: String, **untyped) -> Arcp::Job::Event
       def progress: (current: untyped, ?total: untyped?, ?units: String?, ?message: String?) -> Arcp::Job::Event

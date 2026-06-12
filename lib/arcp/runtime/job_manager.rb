@@ -294,16 +294,20 @@ module Arcp
           job_id: job_id, agent: reg.name, input: submit.input,
           lease: lease, sink: self
         )
+        watchdog = nil
         if submit.max_runtime_sec
-          task.async do
+          watchdog = task.async do
             task.sleep(submit.max_runtime_sec)
+            # The handler may have finished (and finalized the context)
+            # while we slept; do not raise a spurious "already finalized".
+            next if ctx.done?
+
             ctx.fail!(code: 'TIMEOUT', message: 'max_runtime_sec elapsed', retryable: true)
-            task.stop
           end
         end
 
         reg.handler.call(ctx)
-        ctx.finish unless ctx.instance_variable_get(:@done)
+        ctx.finish unless ctx.done?
       rescue Arcp::Error => e
         ctx&.fail!(code: e.code, message: e.message, retryable: e.retryable?, details: e.details || {})
       rescue Async::Stop
@@ -311,6 +315,9 @@ module Arcp
       rescue StandardError => e
         ctx&.fail!(code: 'INTERNAL_ERROR', message: e.message, retryable: true,
                    details: { 'class' => e.class.name })
+      ensure
+        # Cancel the watchdog so a completed job leaves no live timer fiber.
+        watchdog&.stop
       end
     end
   end
