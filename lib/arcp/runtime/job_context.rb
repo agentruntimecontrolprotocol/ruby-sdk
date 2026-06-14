@@ -126,14 +126,17 @@ module Arcp
         )
       end
 
-      def fail!(code:, message: nil, retryable: false, details: {})
+      # Spec §7.3: terminal states are success|error|cancelled|timed_out.
+      # The timeout path passes `final_status: 'timed_out'`; all other
+      # failures terminate as 'error'.
+      def fail!(code:, message: nil, retryable: false, details: {}, final_status: 'error')
         raise Arcp::Errors::ProtocolViolation, 'result already finalized' if @done
 
         @done = true
         @sink.publish_error(
           @job_id,
           Arcp::Job::JobError.new(
-            job_id: @job_id, final_status: 'error',
+            job_id: @job_id, final_status: final_status,
             code: code, message: message, retryable: retryable, details: details
           )
         )

@@ -121,7 +121,7 @@ module Arcp
       def stream_result: (?encoding: String) ?{ (untyped) -> void } -> untyped
       def record_chunk_totals: (Hash[Symbol, untyped]) -> untyped
       def finish: (?result: untyped?) -> untyped
-      def fail!: (code: String, ?message: String?, ?retryable: bool, ?details: Hash[String, untyped]) -> untyped
+      def fail!: (code: String, ?message: String?, ?retryable: bool, ?details: Hash[String, untyped], ?final_status: String) -> untyped
     end
 
     class SessionActor

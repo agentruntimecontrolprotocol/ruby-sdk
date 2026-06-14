@@ -21,7 +21,7 @@ RSpec.describe 'extra branch coverage', type: :integration do
           h.get_result(client: client)
         end
 
-        succeeded = client.list_jobs(status: ['succeeded']).to_a
+        succeeded = client.list_jobs(status: ['success']).to_a
         expect(succeeded.size).to eq(4)
 
         agent_match = client.list_jobs(agent: 'echo').to_a

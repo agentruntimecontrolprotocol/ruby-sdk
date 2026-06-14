@@ -120,7 +120,7 @@ module Arcp
         [job_id, resolved, lease, credentials, accepted_at]
       end
 
-      TERMINAL_STATUSES = %w[success succeeded error cancelled timed_out].freeze
+      TERMINAL_STATUSES = %w[success error cancelled timed_out].freeze
 
       def cancel(job_id:, principal_id:, reason: nil)
         record = @mutex.synchronize { @jobs[job_id] }
@@ -153,6 +153,10 @@ module Arcp
         cursor_seq = decode_cursor(cursor)
         status_filter = filter['status']
         agent_filter = filter['agent']
+        # Spec §6.6: created_after selects jobs created strictly after the
+        # given UTC instant. Parsed once; an unparseable value disables the
+        # filter rather than erroring the whole listing.
+        created_after = parse_created_after(filter['created_after'])
 
         rows = []
         next_cursor = nil
@@ -164,6 +168,7 @@ module Arcp
             next if record.principal_id != principal_id
             next if status_filter && !status_filter.include?(record.status)
             next if agent_filter && !record.agent.start_with?(agent_filter)
+            next if created_after && !record_created_after?(record, created_after)
 
             if rows.size == limit
               next_cursor = rows.last.seq.to_s
@@ -196,6 +201,22 @@ module Arcp
       end
       private :decode_cursor
 
+      def parse_created_after(value)
+        return nil if value.nil? || value.to_s.empty?
+
+        Time.iso8601(value.to_s)
+      rescue ArgumentError
+        nil
+      end
+      private :parse_created_after
+
+      def record_created_after?(record, threshold)
+        Time.iso8601(record.created_at) > threshold
+      rescue ArgumentError
+        false
+      end
+      private :record_created_after?
+
       def lookup(job_id) = @mutex.synchronize { @jobs[job_id] }
 
       def publish_event(job_id, event)
@@ -212,7 +233,10 @@ module Arcp
 
       def publish_result(job_id, result)
         record = @mutex.synchronize do
-          @jobs[job_id] = @jobs[job_id].with(status: 'succeeded') if @jobs[job_id]
+          # Spec §7.3: the terminal set is exactly success|error|cancelled|
+          # timed_out. The listing status MUST be 'success' (matching the
+          # job.result final_status), not 'succeeded'.
+          @jobs[job_id] = @jobs[job_id].with(status: 'success') if @jobs[job_id]
           @jobs[job_id]
         end
         env = Arcp::Envelope.build(
@@ -306,7 +330,8 @@ module Arcp
             # while we slept; do not raise a spurious "already finalized".
             next if ctx.done?
 
-            ctx.fail!(code: 'TIMEOUT', message: 'max_runtime_sec elapsed', retryable: true)
+            ctx.fail!(code: 'TIMEOUT', message: 'max_runtime_sec elapsed', retryable: true,
+                      final_status: 'timed_out')
           end
         end
 

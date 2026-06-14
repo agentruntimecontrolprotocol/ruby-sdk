@@ -94,7 +94,7 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
         handle.cancel(client: client, reason: 'too late')
         Async::Task.current.sleep(0.05)
 
-        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('succeeded')
+        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('success')
 
         replay = runtime.event_log.replay_job(handle.job_id, from_event_seq: 0)
         types = replay.map(&:type)
@@ -119,7 +119,7 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
         # Sleep past the deadline; a leaked watchdog would wake and fail here.
         Async::Task.current.sleep(0.1)
 
-        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('succeeded')
+        expect(runtime.job_manager.lookup(handle.job_id).status).to eq('success')
         types = runtime.event_log.replay_job(handle.job_id, from_event_seq: 0).map(&:type)
         expect(types).not_to include(Arcp::MessageTypes::JOB_ERROR)
 
