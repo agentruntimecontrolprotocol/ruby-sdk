@@ -3,7 +3,10 @@
 module Arcp
   module Session
     CapabilitySet = Data.define(:features, :encodings, :agents) do
-      DEFAULT_ENCODINGS = %w[utf8 base64].freeze
+      # Session-level serialization encodings (spec §6.2). The wire is JSON;
+      # `utf8`/`base64` are result_chunk *data* encodings (§8.4), not session
+      # encodings, and must not leak into capability negotiation.
+      DEFAULT_ENCODINGS = %w[json].freeze
 
       def self.local(features: Feature::ALL, encodings: DEFAULT_ENCODINGS, agents: nil)
         new(features: features.dup.freeze, encodings: encodings.dup.freeze, agents: agents)
