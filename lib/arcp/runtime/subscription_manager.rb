@@ -10,6 +10,7 @@ module Arcp
       def initialize
         @subs = Hash.new { |h, k| h[k] = [] } # job_id => [[session_id, principal_id, queue], ...]
         @owners = {}                          # job_id => principal_id (submitter)
+        @by_session = Hash.new { |h, k| h[k] = [] } # session_id => [job_id, ...]
         @mutex = Mutex.new
       end
 
@@ -17,6 +18,7 @@ module Arcp
         @mutex.synchronize do
           @owners[job_id] = principal_id
           @subs[job_id] << [session_id, principal_id, queue]
+          @by_session[session_id] << job_id
         end
       end
 
@@ -30,22 +32,29 @@ module Arcp
           end
 
           @subs[job_id] << [session_id, principal_id, queue]
+          @by_session[session_id] << job_id
         end
       end
 
       def detach(job_id, session_id)
         @mutex.synchronize do
           @subs[job_id].reject! { |s, _, _| s == session_id }
+          forget_session_job(session_id, job_id)
         end
       end
 
       # Remove every subscription row owned by a session across all jobs.
       # Called when a session is torn down so fanout for still-running jobs
-      # stops enqueueing into the closed session's orphaned outbox.
+      # stops enqueueing into the closed session's orphaned outbox. Uses the
+      # session index so cost is proportional to the session's own
+      # subscriptions, not the whole runtime.
       def detach_session(session_id)
         @mutex.synchronize do
-          @subs.each_value do |entries|
-            entries.reject! { |s, _, _| s == session_id }
+          job_ids = @by_session.delete(session_id) || []
+          job_ids.uniq.each do |job_id|
+            next unless @subs.key?(job_id)
+
+            @subs[job_id].reject! { |s, _, _| s == session_id }
           end
         end
       end
@@ -59,21 +68,34 @@ module Arcp
 
       def clear(job_id)
         @mutex.synchronize do
-          @subs.delete(job_id)
+          entries = @subs.delete(job_id) || []
           @owners.delete(job_id)
+          entries.each { |s, _, _| forget_session_job(s, job_id) }
         end
       end
 
-      # Replace the outbox bound to a session id across every job. Used
-      # when a session resumes: the new actor's outbox supersedes the old.
+      # Replace the outbox bound to a session id across every job it
+      # subscribes to. Used when a session resumes: the new actor's outbox
+      # supersedes the old. Touches only the resumed session's subscriptions
+      # via the session index, not every subscription in the runtime.
       def rebind_session(session_id, new_queue)
         @mutex.synchronize do
-          @subs.each_value do |entries|
-            entries.each_with_index do |(sid, pid, _), idx|
-              entries[idx] = [sid, pid, new_queue] if sid == session_id
-            end
+          (@by_session[session_id] || []).uniq.each do |job_id|
+            next unless @subs.key?(job_id)
+
+            @subs[job_id].each { |entry| entry[2] = new_queue if entry[0] == session_id }
           end
         end
+      end
+
+      private
+
+      # Drop one occurrence of job_id from a session's index, removing the
+      # session key entirely once it has no remaining subscriptions.
+      def forget_session_job(session_id, job_id)
+        list = @by_session[session_id]
+        list.delete(job_id)
+        @by_session.delete(session_id) if list.empty?
       end
     end
   end

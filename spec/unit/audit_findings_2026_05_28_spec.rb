@@ -49,6 +49,38 @@ RSpec.describe 'audit findings 2026-05-28 (unit)' do
     end
   end
 
+  describe 'SubscriptionManager.rebind_session only touches the resumed session (#63)' do
+    subject(:manager) { Arcp::Runtime::SubscriptionManager.new }
+
+    before do
+      50.times { |i| manager.register_owner("job#{i}", "p#{i}", "sess#{i}", "q#{i}") }
+      manager.register_owner('jobA', 'pT', 'S', 'old')
+      manager.register_owner('jobB', 'pT', 'S', 'old')
+    end
+
+    def queues_for(job_id)
+      manager.instance_variable_get(:@subs)[job_id].map { |(_s, _p, q)| q }
+    end
+
+    it 'rewrites only the resumed session\'s entries via the session index' do
+      manager.rebind_session('S', 'new')
+
+      expect(queues_for('jobA')).to eq(['new'])
+      expect(queues_for('jobB')).to eq(['new'])
+      expect(queues_for('job0')).to eq(['q0']) # unrelated session untouched
+      expect(queues_for('job49')).to eq(['q49'])
+      expect(manager.instance_variable_get(:@by_session)['S']).to eq(%w[jobA jobB])
+    end
+
+    it 'keeps the session index consistent across detach and clear' do
+      manager.detach('jobA', 'S')
+      expect(manager.instance_variable_get(:@by_session)['S']).to eq(['jobB'])
+
+      manager.clear('jobB')
+      expect(manager.instance_variable_get(:@by_session)).not_to have_key('S')
+    end
+  end
+
   describe 'EventLog evicts by time without relying on session.ack (#58)' do
     def env(seq)
       Arcp::Envelope.build(type: 'job.event', session_id: 's', job_id: 'j', event_seq: seq, payload: {})
