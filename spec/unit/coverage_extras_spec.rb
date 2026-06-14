@@ -309,7 +309,7 @@ RSpec.describe Arcp::Runtime::CredentialRegistry do
   it 'rotate records a new credential id and revokes the old' do
     issued = registry.issue_for(job_id: 'job_b', lease: nil, agent: 'a@1', principal_id: 'p').first
     new_id = registry.rotate(job_id: 'job_b', credential_id: issued.id, new_value: 'sk-new')
-    expect(new_id).to match(/_rotated_/)
+    expect(new_id).to include('_rotated_')
     expect(store.outstanding(job_id: 'job_b')).to include(new_id)
   end
 
