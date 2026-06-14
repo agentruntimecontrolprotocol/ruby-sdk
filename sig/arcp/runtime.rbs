@@ -48,6 +48,8 @@ module Arcp
       def check!: (String, capability: String) -> untyped
       def check_model!: (String, model_id: String) -> bool
       def try_spend!: (String, String, BigDecimal) -> bool
+      def record_cost: (String, String, BigDecimal) -> untyped
+      def budget_exhausted!: (String) -> void
       def remaining: (String) -> Hash[String, untyped]
       def revoke: (String) -> untyped
     end
@@ -117,7 +119,9 @@ module Arcp
       def metric: (name: String, value: untyped, ?unit: String?) -> Arcp::Job::Event
       def status: (phase: String, ?message: String?, ?fields: Hash[String, untyped]) -> Arcp::Job::Event
       def rotate_credential: (id: String, new_value: String) -> untyped
-      def tool_call: (call_id: String, tool: String, args: untyped) -> Arcp::Job::Event
+      def authorize!: (String) -> String
+      def use_model!: (String) -> String
+      def tool_call: (call_id: String, tool: String, args: untyped, ?capability: String) -> Arcp::Job::Event
       def tool_result: (call_id: String, ?result: untyped?, ?error: untyped?) -> Arcp::Job::Event
       def stream_result: (?encoding: String, ?max_chunk_bytes: Integer?, ?max_total_bytes: Integer?) ?{ (untyped) -> void } -> untyped
       def record_chunk_totals: (Hash[Symbol, untyped]) -> untyped

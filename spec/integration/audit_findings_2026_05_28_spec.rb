@@ -47,6 +47,116 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'cost.* metrics decrement the budget and enforce exhaustion (#44)' do
+    it 'decrements budget on cost metrics and yields BUDGET_EXHAUSTED at the operation boundary' do
+      Sync do
+        lease_mgr = nil
+        remaining_after_first = nil
+        remaining_when_exhausted = nil
+        runtime = build_runtime(
+          agents: { spender: lambda { |ctx|
+            ctx.metric(name: 'cost.inference', value: '0.30', unit: 'USD')
+            remaining_after_first = lease_mgr.remaining(ctx.job_id)['USD']
+            ctx.metric(name: 'cost.inference', value: '0.90', unit: 'USD')
+            remaining_when_exhausted = lease_mgr.remaining(ctx.job_id)['USD']
+            ctx.authorize!('cost.spend') # operation boundary after exhaustion
+            ctx.finish(result: 'unreachable')
+          } }
+        )
+        lease_mgr = runtime.lease_manager
+        client, server_task = open_pair(runtime)
+
+        handle = client.submit_job(
+          agent: 'spender',
+          lease_request: Arcp::Lease::LeaseRequest.new(
+            capabilities: ['cost.spend'],
+            budget: Arcp::Lease::CostBudget.parse(['USD:1.00'])
+          )
+        )
+
+        expect { handle.get_result(client: client) }.to raise_error(Arcp::Errors::BudgetExhausted)
+        expect(remaining_after_first).to eq(BigDecimal('0.70'))
+        expect(remaining_when_exhausted).to eq(BigDecimal('0'))
+
+        client.close
+        server_task.stop
+      end
+    end
+
+    it 'rejects a negative cost metric' do
+      Sync do
+        runtime = build_runtime(
+          agents: { bad: lambda { |ctx|
+            ctx.metric(name: 'cost.inference', value: '-1.00', unit: 'USD')
+            ctx.finish(result: 'unreachable')
+          } }
+        )
+        client, server_task = open_pair(runtime)
+        handle = client.submit_job(
+          agent: 'bad',
+          lease_request: Arcp::Lease::LeaseRequest.new(
+            capabilities: ['cost.spend'], budget: Arcp::Lease::CostBudget.parse(['USD:1.00'])
+          )
+        )
+        expect { handle.get_result(client: client) }.to raise_error(Arcp::Errors::InvalidRequest)
+        client.close
+        server_task.stop
+      end
+    end
+  end
+
+  describe 'lease and model enforcement primitives are invoked (#45)' do
+    it 'raises PERMISSION_DENIED for a capability outside the lease' do
+      Sync do
+        runtime = build_runtime(
+          agents: { agent: ->(ctx) { ctx.authorize!('net.fetch') && ctx.finish(result: 'ok') } }
+        )
+        client, server_task = open_pair(runtime)
+        handle = client.submit_job(
+          agent: 'agent',
+          lease_request: Arcp::Lease::LeaseRequest.new(capabilities: ['fs.read'])
+        )
+        expect { handle.get_result(client: client) }.to raise_error(Arcp::Errors::PermissionDenied)
+        client.close
+        server_task.stop
+      end
+    end
+
+    it 'admits a capability inside the lease' do
+      Sync do
+        runtime = build_runtime(
+          agents: { agent: ->(ctx) { ctx.authorize!('fs.read') && ctx.finish(result: 'ok') } }
+        )
+        client, server_task = open_pair(runtime)
+        handle = client.submit_job(
+          agent: 'agent',
+          lease_request: Arcp::Lease::LeaseRequest.new(capabilities: ['fs.read'])
+        )
+        expect(handle.get_result(client: client).result).to eq('ok')
+        client.close
+        server_task.stop
+      end
+    end
+
+    it 'raises PERMISSION_DENIED for a model outside model.use' do
+      Sync do
+        runtime = build_runtime(
+          agents: { llm: ->(ctx) { ctx.use_model!('anthropic/claude-3-opus') && ctx.finish(result: 'ok') } }
+        )
+        client, server_task = open_pair(runtime)
+        handle = client.submit_job(
+          agent: 'llm',
+          lease_request: Arcp::Lease::LeaseRequest.new(
+            capabilities: ['model.call'], model_use: ['tier-fast/*']
+          )
+        )
+        expect { handle.get_result(client: client) }.to raise_error(Arcp::Errors::PermissionDenied)
+        client.close
+        server_task.stop
+      end
+    end
+  end
+
   describe 'submission rejects a past expires_at (#46)' do
     it 'raises INVALID_REQUEST for an expires_at at or before now' do
       Sync do

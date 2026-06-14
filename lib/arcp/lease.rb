@@ -140,6 +140,21 @@ module Arcp
         true
       end
 
+      # Apply a reported cost to a budgeted currency, clamping at zero so the
+      # counter can reach (but not pass) exhaustion (spec §9.6). Unknown
+      # currencies are ignored (unbudgeted cost is not enforced). Returns true
+      # when the currency was tracked.
+      def spend(currency, amount)
+        return false unless @remaining.key?(currency)
+
+        @remaining[currency] = [@remaining[currency] - amount, BigDecimal('0')].max
+        true
+      end
+
+      def exhausted_currencies
+        @remaining.select { |_ccy, amt| amt <= 0 }.keys
+      end
+
       def get(currency) = @remaining[currency] || BigDecimal('0')
       def negative?(currency) = (@remaining[currency] || BigDecimal('0')).negative?
 

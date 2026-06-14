@@ -86,6 +86,36 @@ module Arcp
         true
       end
 
+      # Spec §9.6: decrement the budgeted currency by a reported cost.* metric
+      # value. Negative values are rejected (no decrement). The counter clamps
+      # at zero; subsequent operations see exhaustion via {#budget_exhausted!}.
+      def record_cost(job_id, currency, amount)
+        if amount.nil? || amount.negative?
+          raise Arcp::Errors::InvalidRequest.new(
+            "cost amount must be non-negative: #{amount.inspect}",
+            details: { 'currency' => currency, 'amount' => amount&.to_s }
+          )
+        end
+
+        counter = self.counter(job_id)
+        counter&.spend(currency, amount)
+      end
+
+      # Spec §9.6 enforcement: raise BUDGET_EXHAUSTED if any of the job's
+      # budget counters is depleted. Jobs with no lease/budget are unrestricted.
+      def budget_exhausted!(job_id)
+        counter = self.counter(job_id)
+        return if counter.nil?
+
+        exhausted = counter.exhausted_currencies
+        return if exhausted.empty?
+
+        raise Arcp::Errors::BudgetExhausted.new(
+          "budget exhausted for: #{exhausted.inspect}",
+          details: { 'currencies' => exhausted }
+        )
+      end
+
       def remaining(job_id)
         c = counter(job_id)
         c ? c.snapshot : {}

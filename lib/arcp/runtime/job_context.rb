@@ -2,6 +2,7 @@
 
 require 'async/queue'
 require 'base64'
+require 'bigdecimal'
 require 'time'
 
 module Arcp
@@ -48,8 +49,37 @@ module Arcp
       end
 
       def metric(name:, value:, unit: nil)
+        # Spec §9.6: a cost.* metric whose unit matches a budgeted currency
+        # decrements that counter. cost.budget.* names are budget telemetry,
+        # not charges, and are not applied.
+        record_cost_metric(name, value, unit)
         emit(kind: Arcp::Job::EventKind::METRIC,
              body: Arcp::Job::EventBody::Metric.new(name: name, value: value, unit: unit))
+      end
+
+      # Spec §9.3/§9.6: synchronous authority check that the runtime mediates
+      # before an authority-bearing operation. Raises BUDGET_EXHAUSTED if any
+      # budget counter is depleted, then PERMISSION_DENIED if the capability is
+      # not covered by the effective lease. Jobs without a lease are
+      # unrestricted. Returns the capability so callers can guard inline.
+      def authorize!(capability)
+        lm = lease_manager
+        return capability unless lm
+
+        lm.budget_exhausted!(@job_id)
+        lm.check!(@job_id, capability: capability)
+        capability
+      end
+
+      # Spec §9.7: reject invocation of a model outside the lease's model.use
+      # with PERMISSION_DENIED (after the budget check). Returns the model id.
+      def use_model!(model_id)
+        lm = lease_manager
+        return model_id unless lm
+
+        lm.budget_exhausted!(@job_id)
+        lm.check_model!(@job_id, model_id: model_id)
+        model_id
       end
 
       def status(phase:, message: nil, fields: {})
@@ -74,7 +104,12 @@ module Arcp
         )
       end
 
-      def tool_call(call_id:, tool:, args:)
+      # Spec §9.3: a tool invocation is an authority-bearing operation, so the
+      # lease/budget is checked before the tool_call event is emitted. The
+      # capability defaults to `tool.call`; pass a more specific capability
+      # (e.g. `fs.write`, `net.fetch`) when the lease grants those.
+      def tool_call(call_id:, tool:, args:, capability: 'tool.call')
+        authorize!(capability)
         emit(kind: Arcp::Job::EventKind::TOOL_CALL,
              body: Arcp::Job::EventBody::ToolCall.new(call_id: call_id, tool: tool, args: args))
       end
@@ -149,6 +184,37 @@ module Arcp
             code: code, message: message, retryable: retryable, details: details
           )
         )
+      end
+
+      private
+
+      def lease_manager = @sink.runtime&.lease_manager
+
+      def record_cost_metric(name, value, unit)
+        return unless unit && name.is_a?(String)
+        return unless name.start_with?('cost.')
+        return if name.start_with?('cost.budget')
+
+        lm = lease_manager
+        return unless lm
+
+        counter = lm.counter(@job_id)
+        return if counter.nil? || !counter.remaining.key?(unit)
+
+        amount = coerce_amount(value)
+        return if amount.nil?
+
+        lm.record_cost(@job_id, unit, amount)
+      end
+
+      def coerce_amount(value)
+        case value
+        when BigDecimal then value
+        when Integer then BigDecimal(value)
+        else BigDecimal(value.to_s)
+        end
+      rescue ArgumentError, TypeError
+        nil
       end
 
       # @api private
