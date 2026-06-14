@@ -1,71 +1,52 @@
 # Conformance
 
-Spec-to-code matrix against `../spec/docs/draft-arcp-1.1.md`. Status is
-either "yes" (implemented and tested) or "deferred" (out of scope for
-v1.0.0). No spec MUST/SHOULD in §4–§16 is unimplemented.
+Spec-to-code matrix against [`../spec/docs/draft-arcp-1.1.md`](../spec/docs/draft-arcp-1.1.md).
+Section numbers match the v1.1 draft. Status is `yes` (implemented and
+tested) or `deferred` (explicitly out of scope per the spec's **Deferred**
+list). Lease, budget, and model enforcement are provided as synchronous
+guarded seams the agent/runtime applies before authority-bearing operations
+(`JobContext#authorize!`, `#use_model!`, and the guarded `#tool_call`).
 
 | Requirement | Status | Location |
 | --- | --- | --- |
-| §4 Terminology and conventions | yes | `lib/arcp/version.rb`, `lib/arcp/message_types.rb` |
-| §5.1 Envelope (arcp, id, type, session_id, trace_id, job_id, event_seq, payload) | yes | `lib/arcp/envelope.rb` |
-| §5.1 trace_id must be 32 hex chars | yes | `lib/arcp/envelope.rb` (`HEX32`) |
-| §5.1 payload MUST be Hash or absent | yes | `lib/arcp/envelope.rb#from_h` |
-| §5.2 Serialization (JSON, UTF-8) | yes | `lib/arcp/serializer.rb` |
-| §5.3 Deep-freeze payload on receive | yes | `lib/arcp/envelope.rb#deep_freeze` |
-| §6.1 session.hello with auth + capabilities | yes | `lib/arcp/session/hello.rb`, `lib/arcp/client.rb#handshake!` |
-| §6.1 Bearer auth scheme | yes | `lib/arcp/auth/bearer.rb` |
-| §6.1 Pluggable AuthScheme | yes | `lib/arcp/auth/auth_scheme.rb` |
-| §6.2 Capability negotiation (intersection) | yes | `lib/arcp/session/capability_set.rb#intersect` |
-| §6.2 Feature names: heartbeat, ack, list_jobs, subscribe, lease_expires_at, cost.budget, progress, result_chunk, agent_versions, model.use, provisioned_credentials | yes | `lib/arcp/session/feature.rb` |
+| §4 Transport (WebSocket / stdio / memory) | yes | `lib/arcp/transport/*.rb` |
+| §5 Wire Format: envelope (arcp, id, type, session_id, trace_id, job_id, event_seq, payload) | yes | `lib/arcp/envelope.rb` |
+| §5 trace_id is 32 hex chars; payload is Hash or absent | yes | `lib/arcp/envelope.rb` (`HEX32`, `from_h`) |
+| §5 JSON / UTF-8 serialization | yes | `lib/arcp/serializer.rb` |
+| §5 Ignore unknown top-level envelope fields; deep-freeze on receive | yes | `lib/arcp/envelope.rb` |
+| §6.1 session.hello auth (bearer, pluggable scheme) | yes | `lib/arcp/session/hello.rb`, `lib/arcp/auth/*.rb` |
+| §6.2 Capability negotiation (intersection); encodings default `["json"]` | yes | `lib/arcp/session/capability_set.rb` |
+| §6.2 Feature names (heartbeat, ack, list_jobs, subscribe, lease_expires_at, cost.budget, model.use, provisioned_credentials, progress, result_chunk, agent_versions) | yes | `lib/arcp/session/feature.rb` |
 | §6.3 session.welcome with resume_token + resume_window_sec | yes | `lib/arcp/session/welcome.rb`, `lib/arcp/runtime/session_actor.rb` |
-| §6.3 Resume by last_event_seq | deferred | n/a |
-| §6.4 session.ping / session.pong heartbeats | yes | `lib/arcp/session/ping.rb`, `lib/arcp/session/pong.rb`, `lib/arcp/client.rb#start_heartbeat!` |
-| §6.4 HEARTBEAT_LOST MUST NOT terminate jobs | yes | `lib/arcp/runtime/session_actor.rb` |
-| §6.5 session.ack with last_processed_seq | yes | `lib/arcp/session/ack.rb`, `lib/arcp/client.rb#ack` |
-| §6.6 session.list_jobs with cursor and filter | yes | `lib/arcp/session/list_jobs.rb`, `lib/arcp/client.rb#list_jobs` |
-| §6.6 session.jobs response with next_cursor | yes | `lib/arcp/session/jobs_response.rb` |
-| §6.7 session.error and session.bye | yes | `lib/arcp/session/session_error.rb`, `lib/arcp/session/bye.rb` |
-| §7.1 job.submit (agent, input, lease_request, lease_constraints, idempotency_key, max_runtime_sec) | yes | `lib/arcp/job/submit.rb` |
-| §7.2 job.accepted with job_id + lease | yes | `lib/arcp/job/accepted.rb` |
-| §7.3 job.event stream with monotonic event_seq | yes | `lib/arcp/job/event.rb`, `lib/arcp/runtime/event_log.rb` |
-| §7.4 job.result (terminal success) | yes | `lib/arcp/job/result.rb` |
-| §7.4 job.error (terminal failure with code) | yes | `lib/arcp/job/job_error.rb` |
-| §7.5 Agent versioning with `name@version` refs | yes | `lib/arcp/session/agent_inventory.rb#resolve` |
-| §7.5 AGENT_VERSION_NOT_AVAILABLE error | yes | `lib/arcp/errors.rb` |
-| §7.6 job.subscribe / job.subscribed / job.unsubscribe | yes | `lib/arcp/job/subscribe.rb`, `lib/arcp/job/subscribed.rb`, `lib/arcp/job/unsubscribe.rb`, `lib/arcp/runtime/subscription_manager.rb` |
-| §7.6 Subscriber MUST NOT cancel | yes | `lib/arcp/runtime/subscription_manager.rb` |
-| §7.6 history=true replays from event_log | yes | `lib/arcp/runtime/event_log.rb` |
-| §7 job.cancel with reason | yes | `lib/arcp/job/cancel.rb`, `lib/arcp/client.rb#cancel_job` |
-| §8.1 Event ordering per job | yes | `lib/arcp/runtime/event_log.rb` |
-| §8.2 EventKind: progress, result_chunk, log, thought, tool_call, tool_result, status, metric, trace_span, delegate | yes | `lib/arcp/job/event.rb#EventKind` |
-| §8.2 Body shape per kind | yes | `lib/arcp/job/event_body/*.rb` |
-| §8.3 progress event body (current, total, units, message) | yes | `lib/arcp/job/event_body/progress.rb` |
-| §8.4 result_chunk with result_id, chunk_seq, data, encoding, more | yes | `lib/arcp/job/event_body/result_chunk.rb` |
-| §8.4 job.result references result_id + result_size | yes | `lib/arcp/runtime/job_context.rb#finish` |
-| §8.4 MUST NOT mix inline result with chunk stream | yes | `lib/arcp/runtime/job_context.rb#finish` |
-| §9.1 Lease record (id, capabilities, budget, expires_at, issued_at) | yes | `lib/arcp/lease.rb` |
-| §9.2 LeaseRequest at submit | yes | `lib/arcp/lease.rb#LeaseRequest`, `lib/arcp/job/submit.rb` |
-| §9.3 lease_constraints.expires_at (UTC `Z` required) | yes | `lib/arcp/lease.rb#LeaseConstraints#validate!` |
-| §9.4 Subsetting on delegate (cap, expires_at, budget bounds) | yes | `lib/arcp/lease.rb#Subsetting.bound` |
-| §9.5 LEASE_EXPIRED on use after expiry | yes | `lib/arcp/lease.rb#Lease#expired?`, `lib/arcp/runtime/lease_manager.rb` |
-| §9.6 cost.budget capability (BigDecimal per currency) | yes | `lib/arcp/lease.rb#CostBudget` |
-| §9.6 BudgetCounter try_decrement | yes | `lib/arcp/lease.rb#BudgetCounter` |
-| §9.6 BUDGET_EXHAUSTED on overspend | yes | `lib/arcp/runtime/lease_manager.rb` |
-| §9.7 model.use capability and lease checks | yes | `lib/arcp/lease.rb`, `lib/arcp/runtime/lease_manager.rb#check_model!` |
-| §9.8 provisioned credential wire shape | yes | `lib/arcp/credential.rb`, `lib/arcp/job/accepted.rb` |
-| §9.8 credential provisioner and revocation lifecycle | yes | `lib/arcp/credential_provisioner.rb`, `lib/arcp/runtime/credential_registry.rb`, `lib/arcp/runtime/job_manager.rb` |
-| §10 Delegate event kind with child lease | yes | `lib/arcp/job/event_body/delegate.rb` |
-| §10 LEASE_SUBSET_VIOLATION on excess | yes | `lib/arcp/lease.rb#Subsetting.bound` |
-| §11 trace_id propagation on envelope | yes | `lib/arcp/envelope.rb`, `lib/arcp/client.rb#send_envelope` |
-| §11 Trace context Fiber-local | yes | `lib/arcp/trace.rb` |
-| §11 OpenTelemetry bridge when present | yes | `lib/arcp/trace.rb#in_span` |
-| §12 15 wire error codes | yes | `lib/arcp/errors.rb` (`WIRE_CODES`) |
-| §12 retryable? defaults | yes | `lib/arcp/errors.rb` |
-| §12 Errors.for(code) factory | yes | `lib/arcp/errors.rb#Errors.for` |
-| §13 Idempotency key on submit | yes | `lib/arcp/job/submit.rb`, `lib/arcp/runtime/job_manager.rb` |
-| §13 DUPLICATE_KEY on idempotency collision | yes | `lib/arcp/runtime/job_manager.rb` |
-| §14 Backpressure signal | yes | `lib/arcp/errors.rb#Backpressure` |
-| §15 Vendor extensions via `x-vendor.*` event kinds | yes | `lib/arcp/job/event.rb#Event.from_h` (unknown kinds pass through frozen) |
-| §16 Subprotocol identifier `arcp.v1` | yes | `lib/arcp/version.rb` |
-| §A.1 Multi-tenant routing | deferred | n/a |
-| §A.2 Wire compression | deferred | n/a |
+| §6.3 Resume by last_event_seq; resume_token rotates on every welcome | yes | `lib/arcp/runtime/session_actor.rb#perform_resume`, `lib/arcp/runtime/resume_registry.rb` |
+| §6.3 RESUME_WINDOW_EXPIRED when buffer no longer covers the cursor | yes | `lib/arcp/runtime/session_actor.rb#perform_resume`, `lib/arcp/runtime/event_log.rb#floor` |
+| §6.4 session.ping / session.pong; HEARTBEAT_LOST never terminates jobs | yes | `lib/arcp/session/ping.rb`, `lib/arcp/session/pong.rb`, `lib/arcp/runtime/session_actor.rb` |
+| §6.5 session.ack with last_processed_seq; early eviction | yes | `lib/arcp/session/ack.rb`, `lib/arcp/runtime/event_log.rb#evict_up_to` |
+| §6.6 session.list_jobs filter (status, agent, created_after) + cursor | yes | `lib/arcp/runtime/job_manager.rb#list`, `lib/arcp/session/list_jobs.rb` |
+| §6.7 session.error and session.bye / close | yes | `lib/arcp/session/session_error.rb`, `lib/arcp/session/bye.rb` |
+| §7.1 job.submit / job.accepted (agent, input, lease_request, lease_constraints, idempotency_key, max_runtime_sec) | yes | `lib/arcp/job/submit.rb`, `lib/arcp/job/accepted.rb` |
+| §7.2 Idempotency replays the original job.accepted; DUPLICATE_KEY on any conflicting parameter | yes | `lib/arcp/runtime/job_manager.rb#idempotent_replay` |
+| §7.3 Terminal states success / error / cancelled / timed_out | yes | `lib/arcp/runtime/job_manager.rb`, `lib/arcp/runtime/job_context.rb` |
+| §7.4 Cancellation: job.cancelled ack then job.error(code=CANCELLED); reject cancel on terminal jobs | yes | `lib/arcp/runtime/job_manager.rb#cancel`, `lib/arcp/job/cancelled.rb` |
+| §7.5 Agent versioning (`name@version`); AGENT_VERSION_NOT_AVAILABLE | yes | `lib/arcp/runtime/job_manager.rb#resolve_agent`, `lib/arcp/errors.rb` |
+| §7.6 job.subscribe / job.subscribed (current_status, agent, lease, parent_job_id, trace_id, subscribed_from, replayed) / job.unsubscribe | yes | `lib/arcp/job/subscribed.rb`, `lib/arcp/runtime/session_actor.rb#handle_subscribe` |
+| §7.6 Same-principal subscription authorization; history replay strictly > from_event_seq | yes | `lib/arcp/runtime/subscription_manager.rb`, `lib/arcp/runtime/event_log.rb#replay_job` |
+| §8.1 / §8.2 Event envelope and kinds (log, thought, tool_call, tool_result, status, metric, artifact_ref, delegate, progress, result_chunk) | yes | `lib/arcp/job/event.rb`, `lib/arcp/job/event_body/*.rb` |
+| §8.2.1 progress.current MUST be non-negative | yes | `lib/arcp/job/event_body/progress.rb` |
+| §8.3 event_seq is session-scoped, strictly monotonic, gap-free | yes | `lib/arcp/runtime/job_manager.rb#publish_event` |
+| §8.4 result_chunk (result_id, chunk_seq, data, encoding, more); no inline/stream mixing | yes | `lib/arcp/job/event_body/result_chunk.rb`, `lib/arcp/runtime/job_context.rb` |
+| §9.1–§9.2 Lease capability model and grammar | yes | `lib/arcp/lease.rb` |
+| §9.3 Synchronous enforcement before an operation (PERMISSION_DENIED) | yes | `lib/arcp/runtime/job_context.rb#authorize!`, `lib/arcp/runtime/lease_manager.rb#check!` |
+| §9.4 Lease subsetting on delegation (cap, expires_at, budget, model bounds) | yes | `lib/arcp/lease.rb#Subsetting.bound` |
+| §9.5 expires_at UTC and in the future at submission; LEASE_EXPIRED on use after expiry | yes | `lib/arcp/lease.rb#LeaseConstraints#validate!`, `lib/arcp/runtime/lease_manager.rb#check!` |
+| §9.6 cost.budget counters decremented on cost.* metrics; negative rejected; BUDGET_EXHAUSTED at the operation boundary | yes | `lib/arcp/runtime/job_context.rb#metric`, `lib/arcp/runtime/lease_manager.rb#record_cost`, `#budget_exhausted!` |
+| §9.7 model.use enforcement (PERMISSION_DENIED) | yes | `lib/arcp/runtime/job_context.rb#use_model!`, `lib/arcp/runtime/lease_manager.rb#check_model!` |
+| §9.8 Provisioned credential wire shape and issue/rotate/revoke lifecycle | yes | `lib/arcp/credential.rb`, `lib/arcp/runtime/credential_registry.rb` |
+| §10 Delegate event kind with subset child lease; LEASE_SUBSET_VIOLATION | yes | `lib/arcp/job/event_body/delegate.rb`, `lib/arcp/lease.rb#Subsetting.bound` |
+| §11 trace_id propagation (Fiber-local, OpenTelemetry bridge when present) | yes | `lib/arcp/trace.rb`, `lib/arcp/envelope.rb` |
+| §12 Error taxonomy (15 codes); retryable defaults; Errors.for factory | yes | `lib/arcp/errors.rb` |
+| §14 Credential value never echoed to subscribers on rotation | yes | `lib/arcp/runtime/job_context.rb#rotate_credential` |
+| §14 Permanent credential-revocation failures logged and surfaced | yes | `lib/arcp/runtime/credential_registry.rb` |
+| §14 result_chunk per-chunk and total size caps (INTERNAL_ERROR) | yes | `lib/arcp/runtime/job_context.rb::ChunkWriter` |
+| §14 Event buffers evicted by time, not only on ack | yes | `lib/arcp/runtime/event_log.rb#expire!` |
+| Deferred: job pause/unpause, priority/scheduling hints, runtime federation, LLM streaming-token surface | deferred | n/a (spec **Deferred** list) |

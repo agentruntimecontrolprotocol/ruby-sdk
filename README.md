@@ -21,7 +21,7 @@
 
 ---
 
-`arcp` is the Ruby reference implementation of [ARCP](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md), the Agent Runtime Control Protocol. It covers both sides of the wire — `Arcp::Client` for submitting and observing jobs, `Arcp::Runtime::Runtime` for hosting agents — so either side can talk to any conformant peer in any language without hand-rolling the envelope, sequencing, or lease enforcement.
+`arcp` is the Ruby reference implementation of [ARCP](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md), the Agent Runtime Control Protocol. It covers both sides of the wire — `Arcp::Client` for submitting and observing jobs, `Arcp::Runtime::Runtime` for hosting agents — so either side can talk to any conformant peer in any language without hand-rolling the envelope, sequencing, or the lease, budget, and model enforcement primitives.
 
 ARCP itself is a transport-agnostic wire protocol for long-running AI agent jobs. It owns the parts of agent infrastructure that don't change between products — sessions, durable event streams, capability leases, budgets, resume — and stays out of the parts that do. ARCP wraps the agent function; it does not define how agents are built, how tools are exposed (that's MCP), or how telemetry is exported (that's OpenTelemetry).
 
@@ -86,7 +86,7 @@ ARCP organizes everything around four concerns — **identity**, **durability**,
 - **Session** — a connection between a client and a runtime. A session carries identity (a bearer token), negotiates a feature set in a `hello`/`welcome` handshake, and keeps a replay window in the runtime's in-memory event log. Transparent reconnect resume is not wired through yet; use `history: true` and `from_event_seq` when you need to replay events. Jobs outlive the session that started them. See [§6](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Job** — one unit of agent work submitted into a session. A job has an identity, an optional idempotency key, a resolved agent version, and a lifecycle that ends in exactly one terminal state: `success`, `error`, `cancelled`, or `timed_out`. See [§7](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Event** — the ordered, session-scoped stream a job emits: logs, thoughts, tool calls and results, status, metrics, artifact references, progress, and streamed result chunks. Events carry strictly monotonic sequence numbers so the stream survives reconnects gap-free. See [§8](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
-- **Lease** — the authority a job runs under, expressed as capability grants (`fs.read`, `fs.write`, `net.fetch`, `tool.call`, `agent.delegate`, `cost.budget`, `model.use`). The runtime enforces the lease at every operation boundary; a job can never act outside it. Leases may carry a budget and an expiry, and may be subset and handed to sub-agents via delegation. See [§9](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
+- **Lease** — the authority a job runs under, expressed as capability grants (`fs.read`, `fs.write`, `net.fetch`, `tool.call`, `agent.delegate`, `cost.budget`, `model.use`). The SDK provides synchronous enforcement seams — `JobContext#authorize!(capability)`, `#use_model!(model_id)`, and the guarded `#tool_call` — that check the lease, budget, and permitted model set *before* an authority-bearing operation runs, raising `PERMISSION_DENIED` or `BUDGET_EXHAUSTED`. An agent routes its operations through these seams so it cannot act outside the lease; `cost.*` metrics decrement the budget automatically. Leases may carry a budget and an expiry, and may be subset and handed to sub-agents via delegation. See [§9](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 - **Subscription** — read-only attachment to a job started elsewhere (e.g. a dashboard watching a job a CLI submitted). A subscriber observes the live event stream but cannot cancel or mutate the job. Distinct from *resume*, which continues the original session and carries cancel authority. See [§7.6](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
 
 The SDK models each of these as first-class objects; the rest of this README shows how.
@@ -156,7 +156,7 @@ handle.subscribe(client: client).each do |event|
   when Arcp::Job::EventKind::LOG
     puts event.body.message
   when Arcp::Job::EventKind::TOOL_CALL
-    puts "-> tool #{event.body.name}(#{event.body.arguments.inspect})"
+    puts "-> tool #{event.body.tool}(#{event.body.args.inspect})"
   when Arcp::Job::EventKind::METRIC
     puts "metric #{event.body.name}=#{event.body.value}#{event.body.unit}"
   when Arcp::Job::EventKind::PROGRESS
@@ -176,7 +176,7 @@ handle = client.submit_job(
   agent: 'web-research',
   input: { 'iterations' => 8 },
   lease_request: Arcp::Lease::LeaseRequest.new(
-    capabilities: ['tool.call', 'cost.spend'],
+    capabilities: ['tool.call', 'net.fetch'],
     budget: Arcp::Lease::CostBudget.parse(['USD:1.00']),
     expires_at: (Time.now.utc + 600).iso8601
   )
