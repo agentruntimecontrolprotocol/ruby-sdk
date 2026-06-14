@@ -37,6 +37,7 @@ module Arcp
       def publish_event: (String, Arcp::Job::Event) -> Integer
       def publish_result: (String, Arcp::Job::Result) -> untyped
       def publish_error: (String, Arcp::Job::JobError) -> untyped
+      def publish_cancelled: (String, String?) -> Arcp::Envelope
     end
 
     class LeaseManager

@@ -18,6 +18,7 @@ module Arcp
     JOB_RESULT        = 'job.result'
     JOB_ERROR         = 'job.error'
     JOB_CANCEL        = 'job.cancel'
+    JOB_CANCELLED     = 'job.cancelled'
     JOB_SUBSCRIBE     = 'job.subscribe'
     JOB_SUBSCRIBED    = 'job.subscribed'
     JOB_UNSUBSCRIBE   = 'job.unsubscribe'
@@ -27,7 +28,7 @@ module Arcp
       SESSION_PING, SESSION_PONG, SESSION_ACK,
       SESSION_LIST_JOBS, SESSION_JOBS,
       JOB_SUBMIT, JOB_ACCEPTED, JOB_EVENT, JOB_RESULT, JOB_ERROR,
-      JOB_CANCEL, JOB_SUBSCRIBE, JOB_SUBSCRIBED, JOB_UNSUBSCRIBE
+      JOB_CANCEL, JOB_CANCELLED, JOB_SUBSCRIBE, JOB_SUBSCRIBED, JOB_UNSUBSCRIBE
     ].freeze
 
     def self.known?(type) = ALL.include?(type)

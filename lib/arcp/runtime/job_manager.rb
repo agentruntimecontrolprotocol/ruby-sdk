@@ -139,10 +139,27 @@ module Arcp
         return if TERMINAL_STATUSES.include?(record.status)
 
         record.task&.stop
+        # Spec §7.4: acknowledge with job.cancelled *before* emitting the
+        # terminating job.error(code=CANCELLED). publish_error clears the
+        # subscriber set, so the acknowledgement must fan out first.
+        publish_cancelled(job_id, reason)
         publish_error(job_id, Arcp::Job::JobError.new(
                                 job_id: job_id, final_status: 'cancelled',
                                 code: 'CANCELLED', message: reason, retryable: false, details: {}
                               ))
+      end
+
+      def publish_cancelled(job_id, reason)
+        record = @mutex.synchronize { @jobs[job_id] }
+        env = Arcp::Envelope.build(
+          type: Arcp::MessageTypes::JOB_CANCELLED,
+          session_id: record&.submitter_session_id || '',
+          job_id: job_id,
+          payload: Arcp::Job::Cancelled.new(job_id: job_id, reason: reason).to_h
+        )
+        @event_log.append(env.session_id, env)
+        @subs.fanout(job_id, env)
+        env
       end
 
       def list(principal_id:, filter: {}, limit: 50, cursor: nil)
