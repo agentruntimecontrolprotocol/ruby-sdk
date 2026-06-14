@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'logger'
+require 'stringio'
 
 RSpec.describe Arcp::Runtime::CredentialRegistry do
   it 'records issued credential ids in the store' do
@@ -56,6 +58,41 @@ RSpec.describe Arcp::Runtime::CredentialRegistry do
 
     expect(provisioner.revoked).to eq(['cred_1'])
     expect(store.all_outstanding).to be_empty
+  end
+
+  it 'logs a permanent revocation failure and keeps the credential outstanding (#53)' do
+    provisioner = always_failing_provisioner_class.new
+    store = Arcp::Credentials::InMemoryStore.new
+    store.record(job_id: 'job_1', credential_id: 'cred_1')
+    io = StringIO.new
+    failures = []
+    registry = described_class.new(
+      provisioner: provisioner, store: store,
+      logger: Logger.new(io),
+      on_revocation_failure: lambda { |credential_id:, job_id:, error:|
+        failures << [job_id, credential_id, error.message]
+      }
+    )
+
+    expect(registry.revoke_all(job_id: 'job_1')).to eq(0)
+    expect(store.outstanding(job_id: 'job_1')).to eq(['cred_1'])
+    expect(io.string).to include('permanent credential revocation failure')
+    expect(io.string).to include('cred_1')
+    expect(failures).to eq([['job_1', 'cred_1', 'upstream down']])
+  end
+
+  def always_failing_provisioner_class
+    Class.new do
+      include Arcp::CredentialProvisioner
+
+      def issue(lease:, job_id:, agent:, principal_id:)
+        []
+      end
+
+      def revoke(credential_id:)
+        raise 'upstream down'
+      end
+    end
   end
 
   def flaky_provisioner_class
