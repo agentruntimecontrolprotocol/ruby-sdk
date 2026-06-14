@@ -47,6 +47,38 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'event_seq is session-scoped across a session\'s jobs (#43)' do
+    it 'assigns strictly increasing, gap-free seqs across two jobs in one session' do
+      Sync do
+        runtime = build_runtime(
+          agents: { emitter: lambda { |ctx|
+            3.times { |i| ctx.log(level: 'info', message: "m#{i}") }
+            Async::Task.current.sleep(5)
+          } }
+        )
+        client, server_task = open_pair(runtime)
+
+        client.submit_job(agent: 'emitter')
+        client.submit_job(agent: 'emitter')
+        Async::Task.current.sleep(0.1)
+
+        session_id = client.session.id
+        seqs = runtime.event_log
+                      .replay(session_id)
+                      .select { |e| e.type == Arcp::MessageTypes::JOB_EVENT }
+                      .map(&:event_seq)
+
+        expect(seqs.size).to eq(6)
+        expect(seqs.uniq).to eq(seqs)        # no repeats across the two jobs
+        expect(seqs).to eq(seqs.sort)        # strictly monotonic
+        expect(seqs).to eq((1..6).to_a)      # gap-free from 1
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
+
   describe 'cancellation emits job.cancelled then job.error (#47)' do
     it 'acknowledges with job.cancelled before the CANCELLED job.error' do
       Sync do

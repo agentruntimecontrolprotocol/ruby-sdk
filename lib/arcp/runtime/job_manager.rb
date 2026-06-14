@@ -33,7 +33,7 @@ module Arcp
         @jobs = {}                      # job_id => JobRecord
         @order = []                     # insertion order of job_ids (oldest first)
         @next_seq = 0                   # monotonic counter assigned at submit
-        @event_seq = Hash.new(0)        # job_id => last emitted seq
+        @event_seq = Hash.new(0)        # submitter session_id => last emitted seq
         @idempotency = {}               # [principal, key] => job_id
         @accepted = {}                  # job_id => [resolved, lease, credentials, accepted_at]
         @mutex = Mutex.new
@@ -237,10 +237,17 @@ module Arcp
       def lookup(job_id) = @mutex.synchronize { @jobs[job_id] }
 
       def publish_event(job_id, event)
-        seq = @mutex.synchronize { @event_seq[job_id] += 1 }
+        # Spec §8.3: event_seq is session-scoped, strictly monotonic, and
+        # gap-free. Key the counter by the submitter session so every job in
+        # a session shares one monotonic stream (two jobs no longer both
+        # start at 1 and collide in that session's replay window).
+        session_id, seq = @mutex.synchronize do
+          sid = @jobs[job_id]&.submitter_session_id || ''
+          [sid, @event_seq[sid] += 1]
+        end
         env = Arcp::Envelope.build(
           type: Arcp::MessageTypes::JOB_EVENT,
-          session_id: @mutex.synchronize { @jobs[job_id]&.submitter_session_id || '' },
+          session_id: session_id,
           job_id: job_id, event_seq: seq, payload: event.to_h
         )
         @event_log.append(env.session_id, env)
