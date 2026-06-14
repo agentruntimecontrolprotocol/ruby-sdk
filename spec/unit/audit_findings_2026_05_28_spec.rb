@@ -49,6 +49,39 @@ RSpec.describe 'audit findings 2026-05-28 (unit)' do
     end
   end
 
+  describe 'streamed result chunks are size-capped (#56)' do
+    let(:sink) do
+      Class.new do
+        def runtime = nil
+        def publish_event(_jid, _event) = 1
+        def publish_result(_jid, _result) = nil
+        def publish_error(_jid, _err) = nil
+      end.new
+    end
+
+    def ctx_with_sink
+      Arcp::Runtime::JobContext.new(
+        job_id: 'job_cap', agent: 'a@1', input: nil, lease: nil, sink: sink
+      )
+    end
+
+    it 'raises INTERNAL_ERROR when a single chunk exceeds the per-chunk cap' do
+      writer = ctx_with_sink.stream_result(max_chunk_bytes: 8)
+      expect { writer.write('x' * 9, more: false) }.to raise_error(Arcp::Errors::Internal)
+    end
+
+    it 'raises INTERNAL_ERROR when the cumulative total exceeds the total cap' do
+      writer = ctx_with_sink.stream_result(max_chunk_bytes: 100, max_total_bytes: 10)
+      writer.write('x' * 6, more: true)
+      expect { writer.write('y' * 6, more: false) }.to raise_error(Arcp::Errors::Internal)
+    end
+
+    it 'allows writes within the caps' do
+      writer = ctx_with_sink.stream_result(max_chunk_bytes: 100, max_total_bytes: 100)
+      expect { writer.write('hello', more: false) }.not_to raise_error
+    end
+  end
+
   describe 'Progress rejects a negative current (#55)' do
     it 'raises INVALID_REQUEST when current is negative' do
       expect do

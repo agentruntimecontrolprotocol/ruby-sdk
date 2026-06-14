@@ -84,13 +84,17 @@ module Arcp
              body: Arcp::Job::EventBody::ToolResult.new(call_id: call_id, result: result, error: error))
       end
 
-      def stream_result(encoding: 'utf8', &block)
+      def stream_result(encoding: 'utf8', max_chunk_bytes: ChunkWriter::DEFAULT_MAX_CHUNK_BYTES,
+                        max_total_bytes: ChunkWriter::DEFAULT_MAX_TOTAL_BYTES, &block)
         raise Arcp::Errors::ProtocolViolation, 'result already finalized' if @done
 
         @chunked = true
         @result_id = Arcp::Ids.result_id
 
-        writer = ChunkWriter.new(ctx: self, encoding: encoding, result_id: @result_id)
+        writer = ChunkWriter.new(
+          ctx: self, encoding: encoding, result_id: @result_id,
+          max_chunk_bytes: max_chunk_bytes, max_total_bytes: max_total_bytes
+        )
         @writer = writer
         if block
           yield writer
@@ -149,10 +153,20 @@ module Arcp
 
       # @api private
       class ChunkWriter
-        def initialize(ctx:, encoding:, result_id:)
+        # Spec §14: runtimes SHOULD cap individual chunk size (e.g. 1 MB) and
+        # total streamed result size; exceeding either MUST yield
+        # INTERNAL_ERROR. Defaults are conservative and overridable per stream.
+        DEFAULT_MAX_CHUNK_BYTES = 1_048_576          # 1 MiB
+        DEFAULT_MAX_TOTAL_BYTES = 256 * 1_048_576    # 256 MiB
+
+        def initialize(ctx:, encoding:, result_id:,
+                       max_chunk_bytes: DEFAULT_MAX_CHUNK_BYTES,
+                       max_total_bytes: DEFAULT_MAX_TOTAL_BYTES)
           @ctx = ctx
           @encoding = encoding
           @result_id = result_id
+          @max_chunk_bytes = max_chunk_bytes
+          @max_total_bytes = max_total_bytes
           @seq = 0
           @bytes = 0
           @closed = false
@@ -161,6 +175,7 @@ module Arcp
         def write(chunk, more: true)
           raise Arcp::Errors::ProtocolViolation, 'stream closed' if @closed
 
+          enforce_size_caps!(chunk.bytesize)
           data = case @encoding
                  when 'base64' then Base64.strict_encode64(chunk)
                  else chunk.dup.force_encoding('UTF-8')
@@ -182,6 +197,24 @@ module Arcp
         end
 
         def totals = { bytes: @bytes, chunks: @seq, result_id: @result_id }
+
+        private
+
+        def enforce_size_caps!(incoming_bytes)
+          if @max_chunk_bytes && incoming_bytes > @max_chunk_bytes
+            raise Arcp::Errors::Internal.new(
+              "result_chunk exceeds per-chunk cap: #{incoming_bytes} > #{@max_chunk_bytes}",
+              details: { 'result_id' => @result_id, 'limit' => @max_chunk_bytes }
+            )
+          end
+
+          return unless @max_total_bytes && (@bytes + incoming_bytes) > @max_total_bytes
+
+          raise Arcp::Errors::Internal.new(
+            "streamed result exceeds total cap: #{@bytes + incoming_bytes} > #{@max_total_bytes}",
+            details: { 'result_id' => @result_id, 'limit' => @max_total_bytes }
+          )
+        end
       end
     end
   end

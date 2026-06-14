@@ -119,7 +119,7 @@ module Arcp
       def rotate_credential: (id: String, new_value: String) -> untyped
       def tool_call: (call_id: String, tool: String, args: untyped) -> Arcp::Job::Event
       def tool_result: (call_id: String, ?result: untyped?, ?error: untyped?) -> Arcp::Job::Event
-      def stream_result: (?encoding: String) ?{ (untyped) -> void } -> untyped
+      def stream_result: (?encoding: String, ?max_chunk_bytes: Integer?, ?max_total_bytes: Integer?) ?{ (untyped) -> void } -> untyped
       def record_chunk_totals: (Hash[Symbol, untyped]) -> untyped
       def finish: (?result: untyped?) -> untyped
       def fail!: (code: String, ?message: String?, ?retryable: bool, ?details: Hash[String, untyped], ?final_status: String) -> untyped
