@@ -309,6 +309,7 @@ module Arcp
         sub = Arcp::Job::Subscribe.from_h(env.payload)
         @runtime.subscription_manager.attach(sub.job_id, @principal.id, @session_id, @outbox)
 
+        replayed = false
         if sub.history
           # Spec §7.6: replay events with seq strictly greater than
           # from_event_seq, so the subscriber never re-receives the event it
@@ -316,10 +317,22 @@ module Arcp
           from = sub.from_event_seq ? sub.from_event_seq + 1 : nil
           replay = @runtime.event_log.replay_job(sub.job_id, from_event_seq: from)
           replay.each { |e| send_envelope(e) }
+          replayed = !replay.empty?
         end
 
+        # Spec §7.6: job.subscribed carries the attached job's current_status,
+        # agent, effective lease, parent_job_id, trace_id and replayed flag so
+        # a subscriber learns the job state on attach.
+        record = @runtime.job_manager.lookup(sub.job_id)
         subscribed = Arcp::Job::Subscribed.new(
-          job_id: sub.job_id, subscribed_from: sub.from_event_seq || 0
+          job_id: sub.job_id,
+          current_status: record&.status,
+          agent: record&.agent,
+          lease: @runtime.lease_manager.get(sub.job_id),
+          parent_job_id: nil,
+          trace_id: env.trace_id,
+          subscribed_from: sub.from_event_seq || 0,
+          replayed: replayed
         )
         send_envelope(Arcp::Envelope.build(
                         type: Arcp::MessageTypes::JOB_SUBSCRIBED,

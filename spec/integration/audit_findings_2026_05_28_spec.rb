@@ -79,6 +79,56 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'job.subscribed carries the required fields (#51)' do
+    it 'includes current_status, agent and lease on attach' do
+      Sync do
+        runtime = build_runtime(
+          agents: { worker: ->(_ctx) { Async::Task.current.sleep(5) } },
+          tokens: { 'alice' => 'alice' }
+        )
+        submitter, sub_task = open_pair(runtime, auth: { 'token' => 'alice' })
+        handle = submitter.submit_job(
+          agent: 'worker',
+          lease_request: Arcp::Lease::LeaseRequest.new(capabilities: ['tool.call'])
+        )
+        Async::Task.current.sleep(0.02)
+
+        obs_server, obs_client = Arcp::Transport::MemoryTransport.pair
+        obs_task = Async { runtime.accept(obs_server) }
+        sid = Arcp::Ids.session_id
+        hello = Arcp::Session::Hello.new(
+          client_name: 'obs', client_version: '1', auth: { 'token' => 'alice' },
+          capabilities: Arcp::Session::CapabilitySet.local, resume: nil
+        )
+        obs_client.send(Arcp::Envelope.build(
+                          type: Arcp::MessageTypes::SESSION_HELLO, session_id: sid, payload: hello.to_h
+                        ))
+        expect(obs_client.receive.type).to eq(Arcp::MessageTypes::SESSION_WELCOME)
+
+        obs_client.send(Arcp::Envelope.build(
+                          type: Arcp::MessageTypes::JOB_SUBSCRIBE, session_id: sid, job_id: handle.job_id,
+                          payload: Arcp::Job::Subscribe.new(
+                            job_id: handle.job_id, from_event_seq: nil, history: false
+                          ).to_h
+                        ))
+        subscribed_env = obs_client.receive
+        expect(subscribed_env.type).to eq(Arcp::MessageTypes::JOB_SUBSCRIBED)
+
+        payload = Arcp::Job::Subscribed.from_h(subscribed_env.payload)
+        expect(payload.current_status).to eq('running')
+        expect(payload.agent).to eq('worker@1.0.0')
+        expect(payload.lease).not_to be_nil
+        expect(payload.lease.capabilities).to include('tool.call')
+        expect(payload.replayed).to be(false)
+
+        submitter.close
+        obs_client.close
+        sub_task.stop
+        obs_task.stop
+      end
+    end
+  end
+
   describe 'idempotency conflict detection compares all parameters (#50)' do
     it 'raises DUPLICATE_KEY when the same key is reused with a different input' do
       Sync do
