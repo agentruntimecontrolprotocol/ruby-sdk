@@ -2,6 +2,8 @@
 
 require 'async'
 require 'async/queue'
+require 'digest'
+require 'json'
 require 'time'
 
 module Arcp
@@ -77,8 +79,9 @@ module Arcp
       def submit(submit:, principal_id:, session_id:, session_actor:)
         reg, resolved = resolve_agent(submit.agent)
 
+        fingerprint = submit_fingerprint(submit, resolved) if submit.idempotency_key
         if submit.idempotency_key
-          replay = idempotent_replay(submit.idempotency_key, principal_id, resolved)
+          replay = idempotent_replay(submit.idempotency_key, principal_id, fingerprint)
           return replay if replay
         end
 
@@ -104,7 +107,9 @@ module Arcp
           @jobs[job_id] = record
           @order << job_id
           @accepted[job_id] = [resolved, lease, credentials, accepted_at]
-          @idempotency[[principal_id, submit.idempotency_key]] = job_id if submit.idempotency_key
+          if submit.idempotency_key
+            @idempotency[[principal_id, submit.idempotency_key]] = [job_id, fingerprint]
+          end
         end
 
         @subs.register_owner(job_id, principal_id, session_id, session_actor.outbox)
@@ -295,23 +300,47 @@ module Arcp
       private
 
       # Returns the replay value for an idempotent resubmission, or nil when
-      # the key has not been seen. Raises DuplicateKey if the key was used for
-      # a different agent. Spec §7.2: a hit returns the *same* job.accepted
-      # payload (lease, credentials, accepted_at) recorded at first acceptance.
-      def idempotent_replay(idempotency_key, principal_id, resolved)
+      # the key has not been seen. Raises DuplicateKey if the key was reused
+      # with *any* conflicting parameter (agent, input, lease_request,
+      # lease_constraints, max_runtime_sec), not just a different agent
+      # (§7.2). A matching key returns the *same* job.accepted payload
+      # (lease, credentials, accepted_at) recorded at first acceptance.
+      def idempotent_replay(idempotency_key, principal_id, fingerprint)
         existing = @mutex.synchronize { @idempotency[[principal_id, idempotency_key]] }
         return nil unless existing
 
-        existing_record = @mutex.synchronize { @jobs[existing] }
-        if existing_record && existing_record.agent != resolved
+        existing_job_id, existing_fingerprint = existing
+        if existing_fingerprint != fingerprint
           raise Arcp::Errors::DuplicateKey.new(
-            'idempotency key reused with different agent',
-            details: { 'job_id' => existing }
+            'idempotency key reused with conflicting parameters',
+            details: { 'job_id' => existing_job_id }
           )
         end
 
-        cached = @mutex.synchronize { @accepted[existing] }
-        cached ? [existing, *cached] : existing
+        cached = @mutex.synchronize { @accepted[existing_job_id] }
+        cached ? [existing_job_id, *cached] : existing_job_id
+      end
+
+      # Stable digest of the parameters that define a job submission. Two
+      # submissions with the same idempotency key must agree on all of these
+      # to be treated as a replay rather than a conflict (§7.2).
+      def submit_fingerprint(submit, resolved)
+        canonical = {
+          'agent' => resolved,
+          'input' => submit.input,
+          'lease_request' => submit.lease_request&.to_h,
+          'lease_constraints' => submit.lease_constraints&.to_h,
+          'max_runtime_sec' => submit.max_runtime_sec
+        }
+        Digest::SHA256.hexdigest(JSON.generate(deep_sort(canonical)))
+      end
+
+      def deep_sort(obj)
+        case obj
+        when Hash then obj.map { |k, v| [k.to_s, deep_sort(v)] }.sort_by(&:first).to_h
+        when Array then obj.map { |v| deep_sort(v) }
+        else obj
+        end
       end
 
       def issue_credentials(job_id:, lease:, agent:, principal_id:)

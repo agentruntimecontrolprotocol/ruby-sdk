@@ -79,6 +79,29 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'idempotency conflict detection compares all parameters (#50)' do
+    it 'raises DUPLICATE_KEY when the same key is reused with a different input' do
+      Sync do
+        runtime = build_runtime(agents: { worker: ->(ctx) { ctx.finish(result: 'ok') } })
+        client, server_task = open_pair(runtime)
+
+        first = client.submit_job(agent: 'worker', input: { 'n' => 1 }, idempotency_key: 'k')
+        expect(first.job_id).not_to be_nil
+
+        expect do
+          client.submit_job(agent: 'worker', input: { 'n' => 2 }, idempotency_key: 'k')
+        end.to raise_error(Arcp::Errors::DuplicateKey)
+
+        # Same key + identical params is still a replay, not a conflict.
+        replay = client.submit_job(agent: 'worker', input: { 'n' => 1 }, idempotency_key: 'k')
+        expect(replay.job_id).to eq(first.job_id)
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
+
   describe 'cancellation emits job.cancelled then job.error (#47)' do
     it 'acknowledges with job.cancelled before the CANCELLED job.error' do
       Sync do
