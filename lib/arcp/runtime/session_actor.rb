@@ -134,10 +134,30 @@ module Arcp
         end
 
         @session_id = entry.session_id
-        @resume_token = token
         last_processed_seq = resume_payload['last_event_seq'] || entry.last_processed_seq || 0
         @last_processed_seq = last_processed_seq
-        @runtime.resume_registry.mark_reconnected(token)
+
+        # Spec §6.3: if the buffer no longer covers the requested cursor (the
+        # requested last_event_seq is below the eviction floor), the resume
+        # window has expired — return RESUME_WINDOW_EXPIRED rather than a
+        # silently gapped replay.
+        if last_processed_seq < @runtime.event_log.floor(@session_id)
+          send_session_error(envelope.session_id,
+                             code: 'RESUME_WINDOW_EXPIRED',
+                             message: 'resume buffer no longer covers last_event_seq')
+          raise Arcp::Errors::ResumeWindowExpired, 'resume buffer no longer covers last_event_seq'
+        end
+
+        # Spec §6.3: rotate the resume token on every successful welcome so the
+        # presented token is single-use and never replayable. Register the new
+        # token (re-keyed to the same session/cursor) and forget the old one.
+        @resume_token = Arcp::Ids.resume_token
+        @runtime.resume_registry.register(
+          token: @resume_token, session_id: @session_id,
+          principal_id: @principal.id, last_processed_seq: last_processed_seq
+        )
+        @runtime.resume_registry.forget(token)
+
         @runtime.subscription_manager.rebind_session(@session_id, @outbox)
         # Replay every envelope with event_seq > last_processed_seq.
         @runtime.event_log.replay(@session_id, from_event_seq: last_processed_seq + 1)

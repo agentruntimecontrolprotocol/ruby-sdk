@@ -47,6 +47,79 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'resume rotates the resume token (#41)' do
+    it 'issues a new token on welcome and invalidates the presented one' do
+      Sync do
+        runtime = build_runtime(
+          agents: { producer: lambda { |ctx|
+            3.times { |i| ctx.log(level: 'info', message: "e#{i}") }
+            ctx.finish(result: 'ok')
+          } }
+        )
+        server_t1, client_t1 = Arcp::Transport::MemoryTransport.pair
+        task1 = Async { runtime.accept(server_t1) }
+        client1 = Arcp::Client.open(transport: client_t1, auth: { 'token' => 'demo' }, client_name: 'spec')
+        handle = client1.submit_job(agent: 'producer')
+        handle.subscribe(client: client1).to_a
+        old_token = client1.session.resume_token
+        session_id = client1.session.id
+        client_t1.close
+        client1.instance_variable_set(:@closed, true)
+        task1.stop
+
+        server_t2, client_t2 = Arcp::Transport::MemoryTransport.pair
+        task2 = Async { runtime.accept(server_t2) }
+        client2 = Arcp::Client.open(
+          transport: client_t2, auth: { 'token' => 'demo' }, client_name: 'spec',
+          resume: { 'token' => old_token, 'last_event_seq' => 0 }
+        )
+
+        expect(client2.session.id).to eq(session_id)
+        expect(client2.session.resume_token).not_to be_nil
+        expect(client2.session.resume_token).not_to eq(old_token)
+        expect(runtime.resume_registry.lookup(old_token)).to be_nil
+
+        client2.close
+        task2.stop
+      end
+    end
+  end
+
+  describe 'resume below the eviction floor returns RESUME_WINDOW_EXPIRED (#42)' do
+    it 'rejects a cursor the buffer no longer covers' do
+      Sync do
+        runtime = build_runtime(
+          agents: { producer: lambda { |ctx|
+            5.times { |i| ctx.log(level: 'info', message: "e#{i}") }
+            ctx.finish(result: 'ok')
+          } }
+        )
+        server_t1, client_t1 = Arcp::Transport::MemoryTransport.pair
+        task1 = Async { runtime.accept(server_t1) }
+        client1 = Arcp::Client.open(transport: client_t1, auth: { 'token' => 'demo' }, client_name: 'spec')
+        handle = client1.submit_job(agent: 'producer')
+        handle.subscribe(client: client1).to_a
+        old_token = client1.session.resume_token
+        client1.ack(4) # evict events with seq <= 4, raising the floor to 4
+        Async::Task.current.sleep(0.05)
+        client_t1.close
+        client1.instance_variable_set(:@closed, true)
+        task1.stop
+
+        server_t2, client_t2 = Arcp::Transport::MemoryTransport.pair
+        task2 = Async { runtime.accept(server_t2) }
+        expect do
+          Arcp::Client.open(
+            transport: client_t2, auth: { 'token' => 'demo' }, client_name: 'spec',
+            resume: { 'token' => old_token, 'last_event_seq' => 2 }
+          )
+        end.to raise_error(Arcp::Errors::ResumeWindowExpired)
+
+        task2.stop
+      end
+    end
+  end
+
   describe 'cost.* metrics decrement the budget and enforce exhaustion (#44)' do
     it 'decrements budget on cost metrics and yields BUDGET_EXHAUSTED at the operation boundary' do
       Sync do
