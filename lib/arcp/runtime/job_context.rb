@@ -64,9 +64,13 @@ module Arcp
           credential_id: id,
           new_value: new_value
         )
+        # Spec §14: the credential `value` MUST NOT be echoed to subscribers.
+        # The rotation status event fans out to every attached subscriber, so
+        # it carries only the credential id; the new value is already known to
+        # the agent that rotated it and is never broadcast.
         status(
           phase: 'credential_rotated',
-          fields: { 'id' => new_id || id, 'value' => new_value }
+          fields: { 'id' => new_id || id }
         )
       end
 

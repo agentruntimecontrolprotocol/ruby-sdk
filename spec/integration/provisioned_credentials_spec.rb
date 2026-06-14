@@ -113,7 +113,10 @@ RSpec.describe 'provisioned credentials', type: :integration do
       events = handle.subscribe(client: client).to_a
       event = events.find { |item| item.body.respond_to?(:phase) && item.body.phase == 'credential_rotated' }
 
-      expect(event.body.fields['value']).to eq('sk-rotated')
+      # Spec §14: the credential value MUST NOT be echoed to subscribers; the
+      # rotation status carries only the credential id.
+      expect(event.body.fields).not_to have_key('value')
+      expect(event.body.fields['id']).to start_with("cred_#{handle.job_id}_0_rotated_")
       expect(provisioner.revoked).to include("cred_#{handle.job_id}_0")
       client.close
       server_task.stop
