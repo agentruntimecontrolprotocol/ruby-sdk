@@ -49,6 +49,37 @@ RSpec.describe 'audit findings 2026-05-28 (unit)' do
     end
   end
 
+  describe 'EventLog evicts by time without relying on session.ack (#58)' do
+    def env(seq)
+      Arcp::Envelope.build(type: 'job.event', session_id: 's', job_id: 'j', event_seq: seq, payload: {})
+    end
+
+    it 'drops events older than the resume window on the next append' do
+      clock = Arcp::FakeClock.new
+      log = Arcp::Runtime::EventLog.new(window_sec: 10, clock: clock)
+
+      log.append('s', env(1))
+      expect(log.buffer_size('s')).to eq(1)
+
+      clock.advance(11)
+      log.append('s', env(2))
+
+      expect(log.replay('s').map(&:event_seq)).to eq([2])
+      expect(log.job_buffer_size('j')).to eq(1)
+    end
+
+    it 'expire! reclaims idle buffers between writes' do
+      clock = Arcp::FakeClock.new
+      log = Arcp::Runtime::EventLog.new(window_sec: 10, clock: clock)
+      log.append('s', env(1))
+
+      clock.advance(11)
+      log.expire!
+
+      expect(log.buffer_size('s')).to eq(0)
+    end
+  end
+
   describe 'streamed result chunks are size-capped (#56)' do
     let(:sink) do
       Class.new do

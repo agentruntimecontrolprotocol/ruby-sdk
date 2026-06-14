@@ -20,8 +20,12 @@ module Arcp
       end
 
       def append(session_id, envelope)
-        entry = [envelope, @clock.monotonic]
+        now = @clock.monotonic
+        entry = [envelope, now]
         @mutex.synchronize do
+          # Self-evict on write so per-session/per-job buffers can never grow
+          # unbounded purely from elapsed time, independent of session.ack.
+          evict_expired!(now)
           @sessions[session_id] << entry
           @jobs[envelope.job_id] << entry if envelope.job_id
         end
@@ -68,18 +72,26 @@ module Arcp
         end
       end
 
-      # Evict events past the resume window (advisory; consumer drives via timer).
+      # Evict events past the resume window. Driven automatically on every
+      # {#append}; also exposed so a runtime MAY schedule it on a periodic
+      # timer to reclaim idle buffers between writes.
       def expire!
-        now = @clock.monotonic
-        @mutex.synchronize do
-          @sessions.each_value do |buf|
-            buf.reject! { |(_e, t)| (now - t) > @window_sec }
-          end
-          @jobs.each_value do |buf|
-            buf.reject! { |(_e, t)| (now - t) > @window_sec }
-          end
+        @mutex.synchronize { evict_expired!(@clock.monotonic) }
+      end
+
+      private
+
+      # Drops entries older than the resume window. Caller holds @mutex.
+      def evict_expired!(now)
+        @sessions.each_value do |buf|
+          buf.reject! { |(_e, t)| (now - t) > @window_sec }
+        end
+        @jobs.each_value do |buf|
+          buf.reject! { |(_e, t)| (now - t) > @window_sec }
         end
       end
+
+      public
 
       # @api private
       def buffer_size(session_id) = @sessions[session_id].size
