@@ -337,7 +337,7 @@ module Arcp
       def run_agent(task, reg, job_id, submit, lease)
         ctx = JobContext.new(
           job_id: job_id, agent: reg.name, input: submit.input,
-          lease: lease, sink: self
+          lease: lease, sink: self, clock: @clock
         )
         watchdog = nil
         if submit.max_runtime_sec

@@ -17,6 +17,38 @@ RSpec.describe 'audit findings 2026-05-28 (unit)' do
     end
   end
 
+  describe 'terminal/delegation timestamps derive from the injected clock (#59)' do
+    let(:sink) do
+      Class.new do
+        attr_reader :result
+
+        def runtime = nil
+        def publish_event(_jid, _event) = 1
+        def publish_result(_jid, result) = (@result = result)
+        def publish_error(_jid, _err) = nil
+      end.new
+    end
+
+    it 'JobContext#finish completed_at uses the clock, not Time.now' do
+      clock = Arcp::FakeClock.new(now: Time.utc(2030, 4, 5, 6, 7, 8))
+      ctx = Arcp::Runtime::JobContext.new(
+        job_id: 'job_x', agent: 'a@1', input: nil, lease: nil, sink: sink, clock: clock
+      )
+      ctx.finish(result: 'ok')
+      expect(sink.result.completed_at).to eq('2030-04-05T06:07:08Z')
+    end
+
+    it 'Subsetting.bound issued_at uses the clock, not Time.now' do
+      clock = Arcp::FakeClock.new(now: Time.utc(2030, 4, 5, 6, 7, 8))
+      parent = Arcp::Lease::Lease.new(
+        id: 'lse_parent', capabilities: ['tool.call'], issued_at: '2026-01-01T00:00:00Z'
+      )
+      request = Arcp::Lease::LeaseRequest.new(capabilities: ['tool.call'])
+      child = Arcp::Lease::Subsetting.bound(parent: parent, request: request, clock: clock)
+      expect(child.issued_at).to eq('2030-04-05T06:07:08Z')
+    end
+  end
+
   describe 'Progress rejects a negative current (#55)' do
     it 'raises INVALID_REQUEST when current is negative' do
       expect do

@@ -14,12 +14,13 @@ module Arcp
 
       def done? = @done
 
-      def initialize(job_id:, agent:, input:, lease:, sink:)
+      def initialize(job_id:, agent:, input:, lease:, sink:, clock: Arcp::SystemClock.new)
         @job_id = job_id
         @agent = agent
         @input = input
         @lease = lease
         @sink = sink
+        @clock = clock
         @event_seq = 0
         @result_id = nil
         @result_totals = nil
@@ -121,7 +122,7 @@ module Arcp
             result: result,
             result_id: @chunked ? @result_id : nil,
             result_size: @chunked ? totals && totals[:bytes] : nil,
-            completed_at: Time.now.utc.iso8601
+            completed_at: @clock.now.iso8601
           )
         )
       end

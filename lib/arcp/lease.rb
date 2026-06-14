@@ -214,7 +214,7 @@ module Arcp
       # `LeaseSubsetViolation` if requested capabilities exceed parent,
       # requested expires_at is beyond parent, or remaining budget can't
       # cover the requested amount.
-      def bound(parent:, request:, parent_remaining: nil)
+      def bound(parent:, request:, parent_remaining: nil, clock: Arcp::SystemClock.new)
         excess = request.capabilities - parent.capabilities
         unless excess.empty?
           raise Arcp::Errors::LeaseSubsetViolation,
@@ -253,7 +253,7 @@ module Arcp
           budget: budget,
           model_use: model_use,
           expires_at: request.expires_at || parent.expires_at,
-          issued_at: Time.now.utc.iso8601
+          issued_at: clock.now.iso8601
         )
       end
 
