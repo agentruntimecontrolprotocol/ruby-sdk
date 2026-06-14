@@ -141,7 +141,7 @@ module Arcp
     # Submits a job and returns the accepted handle.
     def submit_job(agent:, input: nil, lease_request: nil, lease_constraints: nil,
                    idempotency_key: nil, max_runtime_sec: nil)
-      lease_constraints&.validate!
+      lease_constraints&.validate!(clock: @clock)
 
       submit = Arcp::Job::Submit.new(
         agent: agent, input: input,

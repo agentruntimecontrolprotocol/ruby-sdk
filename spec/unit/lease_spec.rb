@@ -37,9 +37,14 @@ RSpec.describe Arcp::Lease::LeaseConstraints do
     expect { constraints.validate! }.to raise_error(Arcp::Errors::InvalidRequest)
   end
 
-  it 'accepts Z-suffixed UTC' do
-    constraints = described_class.new(expires_at: '2026-05-14T10:00:00Z', max_budget: nil)
+  it 'accepts a future Z-suffixed UTC' do
+    constraints = described_class.new(expires_at: '2099-05-14T10:00:00Z', max_budget: nil)
     expect { constraints.validate! }.not_to raise_error
+  end
+
+  it 'rejects a past expires_at as INVALID_REQUEST (§9.5)' do
+    constraints = described_class.new(expires_at: '2020-01-01T00:00:00Z', max_budget: nil)
+    expect { constraints.validate! }.to raise_error(Arcp::Errors::InvalidRequest, /future/)
   end
 end
 

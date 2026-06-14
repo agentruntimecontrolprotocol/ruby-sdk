@@ -7,7 +7,7 @@ module Arcp
       def self.from_h: (Hash[String | Symbol, untyped]?) -> LeaseConstraints?
       def self.parse_max_budget: (untyped) -> CostBudget?
       def to_h: () -> Hash[String, untyped]
-      def validate!: () -> void
+      def validate!: (?clock: untyped) -> void
       def enforce_max_budget!: (CostBudget?) -> void
     end
 

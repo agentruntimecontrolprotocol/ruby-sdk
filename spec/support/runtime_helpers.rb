@@ -14,10 +14,10 @@ module RuntimeHelpers
     runtime
   end
 
-  def open_pair(runtime, auth: { 'token' => 'demo' }, client_name: 'spec')
+  def open_pair(runtime, auth: { 'token' => 'demo' }, client_name: 'spec', clock: Arcp::SystemClock.new)
     server_t, client_t = Arcp::Transport::MemoryTransport.pair
     server_task = Async { runtime.accept(server_t) }
-    client = Arcp::Client.open(transport: client_t, auth: auth, client_name: client_name)
+    client = Arcp::Client.open(transport: client_t, auth: auth, client_name: client_name, clock: clock)
     [client, server_task]
   end
 end

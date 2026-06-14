@@ -264,7 +264,7 @@ module Arcp
 
       def handle_submit(env)
         submit = Arcp::Job::Submit.from_h(env.payload)
-        submit.lease_constraints&.validate!
+        submit.lease_constraints&.validate!(clock: @runtime.clock)
         result = @runtime.job_manager.submit(
           submit: submit, principal_id: @principal.id,
           session_id: @session_id, session_actor: self

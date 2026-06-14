@@ -161,22 +161,28 @@ RSpec.describe 'audit findings 2026-06-11 (integration)', type: :integration do
   end
 
   describe 'lease_constraints-only submit produces an enforceable lease (#76)' do
-    it 'echoes expires_at in job.accepted and enforces expiry' do
+    it 'echoes a future expires_at in job.accepted and enforces expiry once elapsed' do
       Sync do
-        past = (Time.now.utc - 3600).strftime('%Y-%m-%dT%H:%M:%SZ')
-        runtime = build_runtime(agents: { sleepy: ->(_ctx) { Async::Task.current.sleep(5) } })
-        client, server_task = open_pair(runtime)
+        clock = Arcp::FakeClock.new
+        future = (clock.now + 3600).iso8601
+        runtime = build_runtime(
+          agents: { sleepy: ->(_ctx) { Async::Task.current.sleep(5) } }, clock: clock
+        )
+        client, server_task = open_pair(runtime, clock: clock)
 
         handle = client.submit_job(
           agent: 'sleepy',
-          lease_constraints: Arcp::Lease::LeaseConstraints.new(expires_at: past)
+          lease_constraints: Arcp::Lease::LeaseConstraints.new(expires_at: future)
         )
 
         expect(handle.lease).not_to be_nil
-        expect(handle.lease.expires_at).to eq(past)
+        expect(handle.lease.expires_at).to eq(future)
         expect(handle.lease.capabilities).to eq([])
-
         expect(runtime.lease_manager.get(handle.job_id)).not_to be_nil
+
+        # Before expiry the lease is live; advancing past expires_at makes
+        # enforcement raise LEASE_EXPIRED.
+        clock.advance(7200)
         expect do
           runtime.lease_manager.check!(handle.job_id, capability: 'cost.spend')
         end.to raise_error(Arcp::Errors::LeaseExpired)

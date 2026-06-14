@@ -47,6 +47,29 @@ RSpec.describe 'audit findings 2026-05-28 (integration)', type: :integration do
     end
   end
 
+  describe 'submission rejects a past expires_at (#46)' do
+    it 'raises INVALID_REQUEST for an expires_at at or before now' do
+      Sync do
+        clock = Arcp::FakeClock.new
+        runtime = build_runtime(
+          agents: { sleepy: ->(_ctx) { Async::Task.current.sleep(5) } }, clock: clock
+        )
+        client, server_task = open_pair(runtime, clock: clock)
+
+        past = (clock.now - 3600).iso8601
+        expect do
+          client.submit_job(
+            agent: 'sleepy',
+            lease_constraints: Arcp::Lease::LeaseConstraints.new(expires_at: past)
+          )
+        end.to raise_error(Arcp::Errors::InvalidRequest)
+
+        client.close
+        server_task.stop
+      end
+    end
+  end
+
   describe 'event_seq is session-scoped across a session\'s jobs (#43)' do
     it 'assigns strictly increasing, gap-free seqs across two jobs in one session' do
       Sync do

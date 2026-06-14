@@ -46,10 +46,23 @@ module Arcp
         out
       end
 
-      def validate!
+      # Spec §9.5: expires_at MUST be ISO 8601 UTC ('Z') AND strictly in the
+      # future at submission time. Past, present, or unparseable values are
+      # rejected with INVALID_REQUEST. The future check uses the injected
+      # clock so the runtime evaluates it against its authoritative time.
+      def validate!(clock: Arcp::SystemClock.new)
         unless expires_at.nil?
-          t = Time.iso8601(expires_at)
+          begin
+            t = Time.iso8601(expires_at)
+          rescue ArgumentError
+            raise Arcp::Errors::InvalidRequest, "expires_at is not a valid ISO 8601 timestamp: #{expires_at}"
+          end
           raise Arcp::Errors::InvalidRequest, "expires_at must be UTC (use 'Z'): #{expires_at}" unless t.utc?
+
+          if t <= clock.now
+            raise Arcp::Errors::InvalidRequest,
+                  "expires_at must be in the future at submission: #{expires_at}"
+          end
         end
 
         validate_max_budget!
