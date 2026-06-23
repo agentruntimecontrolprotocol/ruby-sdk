@@ -11,7 +11,7 @@ group :development, :test do
   gem 'rbs', '~> 4.0', require: false
   gem 'redcarpet', '~> 3.6', require: false
   gem 'rspec', '~> 3.13'
-  gem 'rubocop', '~> 1.87', require: false
+  gem 'rubocop', '~> 1.88', require: false
   gem 'rubocop-performance', require: false
   gem 'rubocop-rake', require: false
   gem 'rubocop-rspec', require: false
