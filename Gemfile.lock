@@ -15,7 +15,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.3)
-    async (2.39.0)
+    async (2.41.0)
       console (~> 1.29)
       fiber-annotation
       io-event (~> 1.11)
@@ -73,9 +73,9 @@ GEM
     fiber-storage (1.0.1)
     fileutils (1.8.0)
     io-endpoint (0.17.2)
-    io-event (1.16.2)
+    io-event (1.17.0)
     io-stream (0.13.1)
-    json (2.19.9)
+    json (2.20.0)
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
     listen (3.10.0)
